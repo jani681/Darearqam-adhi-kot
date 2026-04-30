@@ -3,21 +3,24 @@ import { db } from './firebase';
 import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore"; 
 
 function App() {
-  const [view, setView] = useState('dashboard'); // dashboard, add, view
+  const [view, setView] = useState('dashboard');
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
   const [image, setImage] = useState("");
   const [records, setRecords] = useState([]);
   const [status, setStatus] = useState('System Online');
 
-  // Database se records lane ka function
   const fetchRecords = async () => {
     setStatus('Fetching data...');
-    const querySnapshot = await getDocs(collection(db, "ali_campus_records"));
-    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    setRecords(data);
-    setStatus('Data Loaded.');
-    setView('view');
+    try {
+      const querySnapshot = await getDocs(collection(db, "ali_campus_records"));
+      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setRecords(data);
+      setStatus('Data Loaded.');
+      setView('view');
+    } catch (err) {
+      alert("Error fetching: " + err.message);
+    }
   };
 
   const handleImageChange = (e) => {
@@ -37,57 +40,62 @@ function App() {
         photo_data: image,
         created_at: serverTimestamp()
       });
-      alert("Record Saved!");
+      alert("Record Saved Successfully!");
       setName(''); setRollNo(''); setImage("");
       setView('dashboard');
-    } catch (err) { alert(err.message); }
+    } catch (err) { 
+      alert("Save Error: " + err.message); 
+    }
   };
 
   return (
     <div style={{ fontFamily: 'Arial', backgroundColor: '#f4f7f6', minHeight: '100vh' }}>
       {/* Navigation Bar */}
       <div style={{ backgroundColor: '#1a4a8e', color: 'white', padding: '15px', textAlign: 'center' }}>
-        <h2>Dar-e-Arqam Ali Campus Portal</h2>
-        <div style={{ marginTop: '10px' }}>
+        <h2 style={{margin: 0}}>Dar-e-Arqam Ali Campus</h2>
+        <div style={{ marginTop: '15px' }}>
           <button onClick={() => setView('dashboard')} style={navBtn}>Home</button>
           <button onClick={() => setView('add')} style={navBtn}>Add Student</button>
-          <button onClick={fetchRecords} style={navBtn}>View All Records</button>
+          <button onClick={fetchRecords} style={navBtn}>View Records</button>
         </div>
       </div>
 
-      <p style={{ textAlign: 'center', color: 'gray' }}>{status}</p>
+      <p style={{ textAlign: 'center', color: '#666', fontSize: '14px' }}>{status}</p>
 
-      {/* Main Content Areas */}
       <div style={{ padding: '20px', maxWidth: '800px', margin: 'auto' }}>
         
         {view === 'dashboard' && (
-          <div style={{ textAlign: 'center', marginTop: '50px' }}>
-            <h3>Welcome, Admin</h3>
-            <p>Ali Campus Adhi Kot ka management system active hai.</p>
+          <div style={{ textAlign: 'center', marginTop: '50px', color: '#1a4a8e' }}>
+            <h3>Admin Dashboard</h3>
+            <p>Ali Campus Adhi Kot Portal is active and ready.</p>
           </div>
         )}
 
         {view === 'add' && (
           <div style={cardStyle}>
-            <h3>New Admission</h3>
-            <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
-            <input placeholder="Roll No" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
-            <input type="file" onChange={handleImageChange} style={{marginBottom: '10px'}} />
-            <button onClick={handleSave} style={saveBtn}>Save Student</button>
+            <h3 style={{color: '#1a4a8e', marginTop: 0}}>New Admission</h3>
+            <input placeholder="Student Full Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <div style={{margin: '15px 0'}}>
+               <label style={{fontSize: '12px', display: 'block', marginBottom: '5px'}}>Student Photo:</label>
+               <input type="file" onChange={handleImageChange} accept="image/*" />
+            </div>
+            {image && <img src={image} alt="preview" style={{width: '80px', borderRadius: '5px', marginBottom: '10px'}} />}
+            <button onClick={handleSave} style={saveBtn}>Save Student Record</button>
           </div>
         )}
 
         {view === 'view' && (
           <div>
-            <h3>Student Directory</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' }}>
-              {records.map(r => (
+            <h3 style={{color: '#1a4a8e'}}>Student Directory</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
+              {records.length > 0 ? records.map(r => (
                 <div key={r.id} style={recordCard}>
-                  <img src={r.photo_data || 'https://via.placeholder.com/100'} alt="student" style={{width: '100%', borderRadius: '8px'}} />
-                  <h4>{r.student_name}</h4>
-                  <p>Roll No: {r.roll_number}</p>
+                  <img src={r.photo_data || 'https://via.placeholder.com/100'} alt="student" style={{width: '100%', height: '150px', objectFit: 'cover', borderRadius: '8px'}} />
+                  <h4 style={{margin: '10px 0 5px 0'}}>{r.student_name}</h4>
+                  <p style={{margin: 0, fontSize: '13px', color: '#666'}}>Roll No: {r.roll_number}</p>
                 </div>
-              ))}
+              )) : <p>No records found.</p>}
             </div>
           </div>
         )}
@@ -96,11 +104,10 @@ function App() {
   );
 }
 
-// Styling Objects
-const navBtn = { margin: '0 5px', padding: '8px 15px', cursor: 'pointer', borderRadius: '5px', border: 'none' };
-const cardStyle = { background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' };
-const inputStyle = { width: '95%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #ddd' };
-const saveBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' };
-const recordCard = { background: 'white', padding: '10px', borderRadius: '10px', textAlign: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' };
+const navBtn = { margin: '0 5px', padding: '8px 12px', cursor: 'pointer', borderRadius: '5px', border: 'none', backgroundColor: '#fff', color: '#1a4a8e', fontWeight: 'bold' };
+const cardStyle = { background: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' };
+const inputStyle = { width: '94%', padding: '12px', marginBottom: '15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '16px' };
+const saveBtn = { width: '100%', padding: '14px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
+const recordCard = { background: 'white', padding: '12px', borderRadius: '10px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' };
 
 export default App;
