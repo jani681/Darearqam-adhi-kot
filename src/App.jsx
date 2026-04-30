@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, serverTimestamp, query, where } from "firebase/firestore"; 
+import { collection, addDoc, getDocs, serverTimestamp, query, orderBy } from "firebase/firestore"; 
 
 function App() {
   const [view, setView] = useState('dashboard');
@@ -8,19 +8,24 @@ function App() {
   const [rollNo, setRollNo] = useState('');
   const [image, setImage] = useState("");
   const [records, setRecords] = useState([]);
-  const [attendance, setAttendance] = useState({}); // {rollNo: 'Present'}
+  const [attendance, setAttendance] = useState({}); 
+  const [searchTerm, setSearchTerm] = useState('');
   const [status, setStatus] = useState('System Online');
 
-  // Students fetch karne ka function
+  // Students load karna (Optimized for performance)
   const fetchRecords = async (targetView) => {
-    setStatus('Loading Data...');
+    setStatus('Syncing with Cloud...');
     try {
-      const querySnapshot = await getDocs(collection(db, "ali_campus_records"));
+      const q = query(collection(db, "ali_campus_records"), orderBy("created_at", "desc"));
+      const querySnapshot = await getDocs(q);
       const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecords(data);
       setStatus('Success');
       setView(targetView);
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+      console.error(err); 
+      setStatus('Error Loading Data');
+    }
   };
 
   const handleImageChange = (e) => {
@@ -30,7 +35,6 @@ function App() {
     if (file) reader.readAsDataURL(file);
   };
 
-  // Admission Save
   const handleSaveStudent = async () => {
     if(!name || !rollNo) return alert("Pehle details bharen!");
     try {
@@ -41,113 +45,102 @@ function App() {
         photo_data: image,
         created_at: serverTimestamp()
       });
-      alert("Admission Done!");
+      alert("Student Registered!");
       setName(''); setRollNo(''); setImage("");
-      setView('dashboard');
+      fetchRecords('dashboard');
     } catch (err) { console.error(err); }
   };
 
-  // Attendance Save Logic
   const handleAttendanceSubmit = async () => {
-    if (Object.keys(attendance).length === 0) return alert("Pehle attendance mark karen!");
-    setStatus('Uploading Attendance...');
+    const today = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+    if (Object.keys(attendance).length === 0) return alert("Empty attendance cannot be saved!");
+    
+    setStatus('Uploading...');
     try {
-      const today = new Date().toISOString().split('T')[0];
       await addDoc(collection(db, "daily_attendance"), {
         date: today,
-        records: attendance,
+        attendance_data: attendance,
+        total_present: Object.values(attendance).filter(v => v === 'P').length,
         timestamp: serverTimestamp()
       });
-      alert("Attendance Saved for " + today);
+      alert(`Attendance Saved for ${today}`);
       setAttendance({});
       setView('dashboard');
     } catch (err) { console.error(err); }
   };
 
+  const filteredStudents = records.filter(r => 
+    r.student_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    r.roll_number.includes(searchTerm)
+  );
+
   return (
-    <div style={{ fontFamily: 'Segoe UI, Arial', backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
-      {/* Dynamic Header based on Role */}
-      <div style={{ backgroundColor: '#1a4a8e', color: 'white', padding: '20px', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-        <h2 style={{margin: 0, letterSpacing: '1px'}}>DAR-E-ARQAM (ALI CAMPUS)</h2>
-        <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '8px' }}>
+    <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
+      <div style={{ backgroundColor: '#1a4a8e', color: 'white', padding: '25px', textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>
+        <h2 style={{margin: 0, fontSize: '24px', fontWeight: '800'}}>DAR-E-ARQAM (ALI CAMPUS)</h2>
+        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={() => setView('dashboard')} style={navBtn}>Home</button>
           <button onClick={() => setView('add')} style={navBtn}>Admission</button>
-          <button onClick={() => fetchRecords('view')} style={navBtn}>Students</button>
-          <button onClick={() => fetchRecords('attendance')} style={navBtn}>Attendance</button>
+          <button onClick={() => fetchRecords('view')} style={navBtn}>Directory</button>
+          <button onClick={() => fetchRecords('attendance')} style={navBtn}>Take Attendance</button>
         </div>
       </div>
 
-      <div style={{ padding: '20px', maxWidth: '900px', margin: 'auto' }}>
-        
-        {/* DASHBOARD */}
+      <div style={{ padding: '20px', maxWidth: '800px', margin: 'auto' }}>
+        <p style={{ textAlign: 'center', color: '#1a4a8e', fontSize: '12px' }}>● {status}</p>
+
         {view === 'dashboard' && (
-          <div style={{ textAlign: 'center', marginTop: '40px' }}>
-            <h3 style={{color: '#1a4a8e'}}>Main Control Panel</h3>
-            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '20px'}}>
-              <div style={statCard}><h4>Total Students</h4><p>{records.length || '...'}</p></div>
-              <div style={statCard}><h4>Status</h4><p style={{color: 'green'}}>Active</p></div>
+          <div style={{ textAlign: 'center', marginTop: '30px' }}>
+            <h3 style={{color: '#333'}}>Main Control Panel</h3>
+            <div style={{display: 'flex', gap: '15px', justifyContent: 'center'}}>
+              <div style={statCard}><h2 style={{margin: 0}}>{records.length}</h2><p style={{margin: 0}}>Total Students</p></div>
+              <div style={statCard}><h2 style={{margin: 0, color: '#28a745'}}>Active</h2><p style={{margin: 0}}>Cloud Sync</p></div>
             </div>
           </div>
         )}
 
-        {/* ADMISSION FORM */}
         {view === 'add' && (
           <div style={cardStyle}>
-            <h3 style={{color: '#1a4a8e', borderBottom: '2px solid #1a4a8e', paddingBottom: '10px'}}>Student Registration</h3>
-            <input placeholder="Student Full Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
-            <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
-            <label style={{display: 'block', fontSize: '12px', margin: '10px 0'}}>Profile Picture:</label>
-            <input type="file" onChange={handleImageChange} accept="image/*" />
-            <button onClick={handleSaveStudent} style={actionBtn}>Submit Admission</button>
+            <h3 style={{color: '#1a4a8e', marginTop: 0}}>Student Registration</h3>
+            <input placeholder="Full Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll Number (e.g. 001)" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <input type="file" onChange={handleImageChange} style={{margin: '10px 0'}} />
+            <button onClick={handleSaveStudent} style={actionBtn}>Register Student</button>
           </div>
         )}
 
-        {/* VIEW RECORDS */}
         {view === 'view' && (
           <div>
-            <h3 style={{color: '#1a4a8e'}}>Student Directory</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '15px' }}>
-              {records.map(r => (
+            <input placeholder="Search Student..." onChange={(e)=>setSearchTerm(e.target.value)} style={{...inputStyle, marginBottom: '20px'}} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
+              {filteredStudents.map(r => (
                 <div key={r.id} style={recordCard}>
-                  <img src={r.photo_data || 'https://via.placeholder.com/100'} style={imgStyle} />
-                  <p style={{fontWeight: 'bold', margin: '8px 0 2px 0'}}>{r.student_name}</p>
-                  <p style={{fontSize: '12px', color: '#666'}}>Roll: {r.roll_number}</p>
+                  <img src={r.photo_data || 'https://via.placeholder.com/100'} style={imgStyle} alt="student" />
+                  <h4 style={{margin: '10px 0 2px 0'}}>{r.student_name}</h4>
+                  <p style={{margin: 0, fontSize: '12px', color: '#888'}}>Roll: {r.roll_number}</p>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ATTENDANCE SYSTEM */}
         {view === 'attendance' && (
           <div style={cardStyle}>
-            <h3 style={{color: '#1a4a8e'}}>Daily Attendance ({new Date().toLocaleDateString()})</h3>
-            <table style={{width: '100%', borderCollapse: 'collapse'}}>
-              <thead>
-                <tr style={{borderBottom: '1px solid #ddd'}}>
-                  <th style={{textAlign: 'left', padding: '10px'}}>Student</th>
-                  <th style={{textAlign: 'right', padding: '10px'}}>Mark</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map(r => (
-                  <tr key={r.id} style={{borderBottom: '1px solid #eee'}}>
-                    <td style={{padding: '10px'}}>{r.student_name} ({r.roll_number})</td>
-                    <td style={{padding: '10px', textAlign: 'right'}}>
-                      <button 
-                        onClick={() => setAttendance({...attendance, [r.roll_number]: 'P'})}
-                        style={{...statusBtn, backgroundColor: attendance[r.roll_number] === 'P' ? '#28a745' : '#ddd'}}
-                      >P</button>
-                      <button 
-                        onClick={() => setAttendance({...attendance, [r.roll_number]: 'A'})}
-                        style={{...statusBtn, backgroundColor: attendance[r.roll_number] === 'A' ? '#dc3545' : '#ddd'}}
-                      >A</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={handleAttendanceSubmit} style={{...actionBtn, marginTop: '20px'}}>Save Today's Attendance</button>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+               <h3 style={{margin: 0}}>Mark Attendance</h3>
+               <span style={{fontSize: '12px', background: '#eee', padding: '4px 8px', borderRadius: '5px'}}>{new Date().toDateString()}</span>
+            </div>
+            <hr style={{margin: '15px 0', opacity: 0.2}} />
+            {records.map(r => (
+              <div key={r.id} style={{display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #f0f0f0'}}>
+                <span>{r.student_name} <small>({r.roll_number})</small></span>
+                <div>
+                  <button onClick={() => setAttendance({...attendance, [r.roll_number]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.roll_number] === 'P' ? '#28a745' : '#ccc'}}>P</button>
+                  <button onClick={() => setAttendance({...attendance, [r.roll_number]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.roll_number] === 'A' ? '#dc3545' : '#ccc'}}>A</button>
+                </div>
+              </div>
+            ))}
+            <button onClick={handleAttendanceSubmit} style={{...actionBtn, marginTop: '20px'}}>Save Records</button>
           </div>
         )}
       </div>
@@ -155,14 +148,13 @@ function App() {
   );
 }
 
-// Styling
-const navBtn = { padding: '8px 16px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: '#fff', color: '#1a4a8e', fontSize: '13px' };
-const cardStyle = { background: 'white', padding: '25px', borderRadius: '15px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' };
-const inputStyle = { width: '95%', padding: '12px', marginBottom: '15px', borderRadius: '8px', border: '1px solid #ddd' };
-const actionBtn = { width: '100%', padding: '15px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' };
-const statCard = { background: '#fff', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' };
-const recordCard = { background: '#fff', padding: '10px', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' };
-const imgStyle = { width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px' };
-const statusBtn = { margin: '0 2px', padding: '5px 10px', border: 'none', borderRadius: '4px', color: 'white', fontWeight: 'bold', cursor: 'pointer' };
+const navBtn = { padding: '10px 18px', borderRadius: '25px', border: 'none', cursor: 'pointer', fontWeight: 'bold', backgroundColor: '#fff', color: '#1a4a8e', fontSize: '13px', transition: '0.3s' };
+const cardStyle = { background: 'white', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' };
+const inputStyle = { width: '95%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: '1px solid #eee', background: '#fcfcfc' };
+const actionBtn = { width: '100%', padding: '15px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
+const statCard = { background: '#fff', padding: '20px', borderRadius: '15px', width: '120px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' };
+const recordCard = { background: '#fff', padding: '10px', borderRadius: '15px', textAlign: 'center', border: '1px solid #f0f0f0' };
+const imgStyle = { width: '100%', height: '110px', objectFit: 'cover', borderRadius: '10px' };
+const statusBtn = { marginLeft: '5px', padding: '6px 12px', border: 'none', borderRadius: '6px', color: 'white', fontWeight: 'bold', cursor: 'pointer' };
 
 export default App;
