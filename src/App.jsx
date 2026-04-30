@@ -20,32 +20,50 @@ function App() {
   
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
+  const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
 
-  // --- PDF GENERATION LOGIC ---
+  // --- PDF Logic ---
   const downloadPDF = (data) => {
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.setTextColor(26, 74, 142);
     doc.text("DAR-E-ARQAM (ALI CAMPUS) ADHI KOT", 105, 15, { align: "center" });
-    
     doc.setFontSize(12);
     doc.setTextColor(0, 0, 0);
     doc.text(`Attendance Report: ${data.class}`, 14, 25);
     doc.text(`Date: ${data.date}`, 14, 32);
-
     const tableRows = [];
     Object.entries(data.attendance_data).forEach(([name, status], index) => {
       tableRows.push([index + 1, name, status === 'P' ? 'Present' : 'Absent']);
     });
-
     doc.autoTable({
       startY: 40,
       head: [['Sr#', 'Student Name', 'Status']],
       body: tableRows,
       headStyles: { fillColor: [26, 74, 142] },
     });
-
     doc.save(`Attendance_${data.class}_${data.date}.pdf`);
+  };
+
+  // --- Admission Logic (Fixed) ---
+  const handleSave = async () => {
+    if(!name || !rollNo) return alert("Please enter all details");
+    setStatus('Saving...');
+    try {
+      await addDoc(collection(db, "ali_campus_records"), { 
+        student_name: name, 
+        roll_number: rollNo, 
+        class: selectedClass, 
+        created_at: serverTimestamp() 
+      });
+      setName(''); 
+      setRollNo(''); 
+      setStatus('Student Registered!');
+      setView('dashboard');
+    } catch (e) { 
+      alert("Error: " + e.message); 
+      setStatus('Error');
+    }
   };
 
   const handleLogin = () => {
@@ -54,7 +72,7 @@ function App() {
   };
 
   const fetchRecordsByClass = async (target, cls) => {
-    setStatus('Loading Students...');
+    setStatus('Loading...');
     const q = query(collection(db, "ali_campus_records"), where("class", "==", cls));
     const snap = await getDocs(q);
     setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -93,7 +111,6 @@ function App() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
-      {/* Header */}
       <div style={{ backgroundColor: '#1a4a8e', color: 'white', padding: '20px', textAlign: 'center', position: 'relative' }}>
         <button onClick={() => setIsLoggedIn(false)} style={{ position: 'absolute', top: '10px', right: '10px', padding: '5px 10px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '5px', fontSize: '10px' }}>LOGOUT</button>
         <h2>DAR-E-ARQAM (ALI CAMPUS)</h2>
@@ -107,25 +124,26 @@ function App() {
       </div>
 
       <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
-        
-        {/* Search Bar for Lists */}
-        {(view === 'view' || view === 'attendance') && (
-          <input type="text" placeholder="🔍 Search Students..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
+        <p style={{textAlign:'center', fontSize:'10px', color:'#666'}}>{status}</p>
+
+        {view === 'dashboard' && <div style={{textAlign:'center'}}><h3>Admin Panel Active</h3><p>Manage your students and attendance from the menu above.</p></div>}
+
+        {/* Admission Form (Fixed Display) */}
+        {view === 'add' && (
+          <div style={cardStyle}>
+            <h3>New Student Registration</h3>
+            <input placeholder="Student Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={handleSave} style={actionBtn}>Register Student</button>
+          </div>
         )}
 
-        {/* --- HISTORY VIEW WITH PDF BUTTON --- */}
-        {view === 'history' && (
-          <div>
-            <h3>Recent Reports</h3>
-            {history.map(h => (
-              <div key={h.id} style={cardStyle}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                   <div><b>{h.date}</b><br/><small>{h.class}</small></div>
-                   <button onClick={() => downloadPDF(h)} style={{ padding: '6px 12px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', fontSize: '12px' }}>Download PDF</button>
-                </div>
-              </div>
-            ))}
-          </div>
+        {/* Directory & Attendance with Search */}
+        {(view === 'view' || view === 'attendance') && (
+          <input type="text" placeholder="🔍 Search Students..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
         )}
 
         {view === 'view' && (
@@ -137,17 +155,44 @@ function App() {
           </div>
         )}
 
+        {view === 'attendance' && (
+          <div style={cardStyle}>
+            <h3>Attendance: {filterClass}</h3>
+            {filteredRecords.map(r => (
+              <div key={r.id} style={{display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #eee'}}>
+                <span>{r.student_name}</span>
+                <div>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc'}}>P</button>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc'}}>A</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {(view === 'sel_view' || view === 'sel_att') && (
           <div style={cardStyle}>
             <h3>Select Class</h3>
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open</button>
+            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open Class</button>
           </div>
         )}
 
-        {view === 'dashboard' && <div style={{textAlign:'center'}}><h3>Admin Portal Ready</h3></div>}
+        {view === 'history' && (
+          <div>
+            <h3>Attendance Reports</h3>
+            {history.map(h => (
+              <div key={h.id} style={cardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <div><b>{h.date}</b><br/><small>{h.class}</small></div>
+                   <button onClick={() => downloadPDF(h)} style={{ padding: '6px 12px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', fontSize: '12px' }}>Download PDF</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -157,5 +202,6 @@ const navBtn = { padding: '8px 10px', borderRadius: '5px', border: 'none', fontW
 const cardStyle = { background: 'white', padding: '15px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '10px' };
 const inputStyle = { width: '100%', padding: '10px', margin: '10px 0', borderRadius: '5px', border: '1px solid #ddd', boxSizing: 'border-box' };
 const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold' };
+const statusBtn = { marginLeft: '5px', padding: '6px 12px', border: 'none', borderRadius: '4px', color: 'white' };
 
 export default App;
