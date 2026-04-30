@@ -25,7 +25,6 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Keyboard-Style Navigation Styling
   const getNavStyle = (targetView) => ({
     padding: '12px 5px',
     borderRadius: '10px',
@@ -84,7 +83,6 @@ function App() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
-      {/* --- HEADER WITH FIXED LOGO & NAV --- */}
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
           <img 
@@ -109,7 +107,6 @@ function App() {
       <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
         <p style={{textAlign:'center', fontSize:'10px', color:'#666', marginBottom:'10px'}}>{status}</p>
 
-        {/* DASHBOARD: CLICKABLE CLASS CARDS */}
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px'}}>
             {CLASSES.map(c => (
@@ -126,7 +123,6 @@ function App() {
           </div>
         )}
 
-        {/* DIRECTORY VIEW */}
         {view === 'view' && !editingStudent && (
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
@@ -135,12 +131,16 @@ function App() {
             </div>
             <input placeholder="🔍 Search Students..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
-              <div key={r.id} style={cardStyle}>
+              <div key={r.id} style={{
+                  ...cardStyle, 
+                  backgroundColor: r.fee_status === 'Paid' ? '#f0fff4' : '#fff5f5', 
+                  borderLeft: r.fee_status === 'Paid' ? '5px solid #28a745' : '5px solid #dc3545'
+              }}>
                 <div style={{display:'flex', justifyContent:'space-between'}}>
                   <div><b>{r.student_name}</b> <br/> <small>Roll: {r.roll_number}</small></div>
                   <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
                     <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", r.id), { fee_status: r.fee_status === 'Paid' ? 'Unpaid' : 'Paid' }); fetchRecordsByClass('view', filterClass); }} style={{padding:'4px 8px', fontSize:'10px', background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px'}}>{r.fee_status || 'Unpaid'}</button>
-                    <a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{background:'#25D366', color:'white', padding:'4px 8px', borderRadius:'5px', textDecoration:'none', fontSize:'10px', textAlign:'center'}}>WhatsApp</a>
+                    <a href={`https://wa.me/${r.parent_whatsapp}?text=${encodeURIComponent(`Dear Parent, this is to inform you that ${r.student_name}'s school fee is currently ${r.fee_status || 'Unpaid'}. Kindly clear it. Regards: Dar-e-Arqam Ali Campus.`)}`} target="_blank" rel="noreferrer" style={{background:'#25D366', color:'white', padding:'4px 8px', borderRadius:'5px', textDecoration:'none', fontSize:'10px', textAlign:'center'}}>WhatsApp</a>
                   </div>
                 </div>
                 <div style={{display:'flex', gap:'5px', marginTop:'10px'}}>
@@ -152,7 +152,6 @@ function App() {
           </div>
         )}
 
-        {/* ATTENDANCE MARKING */}
         {view === 'attendance' && (
           <div>
             <h3 style={{textAlign:'center'}}>Marking: {filterClass}</h3>
@@ -169,7 +168,6 @@ function App() {
           </div>
         )}
 
-        {/* HISTORY */}
         {view === 'history' && (
           <div>
             <h3>Reports Archive</h3>
@@ -184,7 +182,6 @@ function App() {
           </div>
         )}
 
-        {/* ADMISSION FORM */}
         {view === 'add' && (
           <div style={cardStyle}>
             <h3>Admission</h3>
