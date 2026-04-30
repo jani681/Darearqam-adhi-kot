@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db } from './firebase';
 import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc } from "firebase/firestore"; 
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const CLASSES = ["Playgroup", "Nursery", "KG", "1st Class", "2nd Class", "3rd Class", "4th Class", "5th Class", "6th Class", "7th Class", "8th Class", "9th Class", "10th Class"];
 const ADMIN_PASSWORD = "ali786"; 
@@ -24,6 +26,36 @@ function App() {
   const [editingStudent, setEditingStudent] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
+
+  // --- PDF GENERATION LOGIC ---
+  const downloadPDF = (record) => {
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(18);
+    doc.setTextColor(26, 74, 142);
+    doc.text("DAR-E-ARQAM (ALI CAMPUS)", 105, 15, { align: "center" });
+    
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Class: ${record.class}`, 14, 25);
+    doc.text(`Date: ${record.date}`, 14, 32);
+    
+    const tableRows = [];
+    Object.entries(record.attendance_data).forEach(([name, status], index) => {
+      tableRows.push([index + 1, name, status === 'P' ? 'Present' : 'Absent']);
+    });
+
+    doc.autoTable({
+      startY: 40,
+      head: [['Sr.', 'Student Name', 'Status']],
+      body: tableRows,
+      headStyles: { fillColor: [26, 74, 142] },
+      alternateRowStyles: { fillColor: [240, 242, 245] },
+    });
+
+    doc.save(`Attendance_${record.class}_${record.date}.pdf`);
+  };
 
   const getNavStyle = (targetView) => ({
     padding: '12px 5px',
@@ -125,10 +157,6 @@ function App() {
 
         {view === 'view' && !editingStudent && (
           <div>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-               <h3 style={{margin:0}}>{filterClass}</h3>
-               <button onClick={() => fetchRecordsByClass('attendance', filterClass)} style={{padding:'6px 12px', fontSize:'11px', background:'#28a745', color:'white', border:'none', borderRadius:'5px', fontWeight:'bold'}}>Mark Attendance</button>
-            </div>
             <input placeholder="🔍 Search Students..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
               <div key={r.id} style={{
@@ -140,19 +168,14 @@ function App() {
                   <div><b>{r.student_name}</b> <br/> <small>Roll: {r.roll_number}</small></div>
                   <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
                     <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", r.id), { fee_status: r.fee_status === 'Paid' ? 'Unpaid' : 'Paid' }); fetchRecordsByClass('view', filterClass); }} style={{padding:'4px 8px', fontSize:'10px', background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px'}}>{r.fee_status || 'Unpaid'}</button>
-                    <a href={`https://wa.me/${r.parent_whatsapp}?text=${encodeURIComponent(`Dear Parent, this is to inform you that ${r.student_name}'s school fee is currently ${r.fee_status || 'Unpaid'}. Kindly clear it. Regards: Dar-e-Arqam Ali Campus.`)}`} target="_blank" rel="noreferrer" style={{background:'#25D366', color:'white', padding:'4px 8px', borderRadius:'5px', textDecoration:'none', fontSize:'10px', textAlign:'center'}}>WhatsApp</a>
+                    <a href={`https://wa.me/${r.parent_whatsapp}?text=${encodeURIComponent(`Dear Parent, your child ${r.student_name}'s fee is ${r.fee_status || 'Unpaid'}. Regards: Ali Campus.`)}`} target="_blank" rel="noreferrer" style={{background:'#25D366', color:'white', padding:'4px 8px', borderRadius:'5px', textDecoration:'none', fontSize:'10px', textAlign:'center'}}>WhatsApp</a>
                   </div>
-                </div>
-                <div style={{display:'flex', gap:'5px', marginTop:'10px'}}>
-                  <button onClick={() => setEditingStudent(r)} style={{flex:1, padding:'8px', background:'#f0f0f0', border:'1px solid #ccc', borderRadius:'8px', fontSize:'11px', fontWeight:'bold'}}>Edit</button>
-                  <button onClick={async () => { if(window.confirm("Delete?")) { await deleteDoc(doc(db, "ali_campus_records", r.id)); fetchRecordsByClass('view', filterClass); } }} style={{flex:1, padding:'8px', background:'#fff0f0', border:'1px solid #ffcccc', color:'red', borderRadius:'8px', fontSize:'11px', fontWeight:'bold'}}>Delete</button>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* --- SMART ATTENDANCE WITH COLOR FEEDBACK --- */}
         {view === 'attendance' && (
           <div>
             <h3 style={{textAlign:'center'}}>Marking: {filterClass}</h3>
@@ -160,24 +183,18 @@ function App() {
               <div key={r.id} style={{
                   ...cardStyle, 
                   display:'flex', 
-                  justifyContent:'space-between', 
-                  alignItems:'center',
+                  justifyContent:'space-between',
                   backgroundColor: attendance[r.student_name] === 'P' ? '#f0fff4' : attendance[r.student_name] === 'A' ? '#fff5f5' : 'white',
                   borderRight: attendance[r.student_name] === 'P' ? '8px solid #28a745' : attendance[r.student_name] === 'A' ? '8px solid #dc3545' : 'none'
               }}>
                 <span style={{fontWeight:'bold'}}>{r.student_name}</span>
                 <div style={{display:'flex', gap:'8px'}}>
-                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc', boxShadow: '0 3px 0 #1e7e34'}}>P</button>
-                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc', boxShadow: '0 3px 0 #bd2130'}}>A</button>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc'}}>P</button>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc'}}>A</button>
                 </div>
               </div>
             ))}
-            <button 
-                disabled={Object.keys(attendance).length === 0}
-                onClick={async () => { await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); }} 
-                style={{...actionBtn, opacity: Object.keys(attendance).length === 0 ? 0.5 : 1}}>
-              Finalize & Submit
-            </button>
+            <button disabled={Object.keys(attendance).length === 0} onClick={async () => { await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); }} style={actionBtn}>Submit Attendance</button>
           </div>
         )}
 
@@ -188,7 +205,7 @@ function App() {
               <div key={h.id} style={cardStyle}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                   <div><b>{h.date}</b><br/><small>{h.class}</small></div>
-                  <button style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', boxShadow:'0 3px 0 #0d2a54'}}>PDF</button>
+                  <button onClick={() => downloadPDF(h)} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', boxShadow:'0 3px 0 #0d2a54'}}>📥 PDF</button>
                 </div>
               </div>
             ))}
@@ -200,7 +217,7 @@ function App() {
             <h3>Admission</h3>
             <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
             <input placeholder="Roll" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
-            <input placeholder="WhatsApp (923...)" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
+            <input placeholder="WhatsApp" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
             <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -215,17 +232,6 @@ function App() {
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open Class</button>
-          </div>
-        )}
-
-        {editingStudent && (
-          <div style={cardStyle}>
-            <h3>Edit Profile</h3>
-            <input value={editingStudent.student_name} onChange={(e)=>setEditingStudent({...editingStudent, student_name: e.target.value})} style={inputStyle} />
-            <input value={editingStudent.roll_number} onChange={(e)=>setEditingStudent({...editingStudent, roll_number: e.target.value})} style={inputStyle} />
-            <input value={editingStudent.parent_whatsapp} onChange={(e)=>setEditingStudent({...editingStudent, parent_whatsapp: e.target.value})} style={inputStyle} />
-            <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", editingStudent.id), { student_name: editingStudent.student_name, roll_number: editingStudent.roll_number, parent_whatsapp: editingStudent.parent_whatsapp }); setEditingStudent(null); fetchRecordsByClass('view', filterClass); }} style={actionBtn}>Save Changes</button>
-            <button onClick={() => setEditingStudent(null)} style={{width:'100%', marginTop:'10px', padding:'10px', borderRadius:'5px', border:'none'}}>Cancel</button>
           </div>
         )}
       </div>
