@@ -10,6 +10,5 @@ const firebaseConfig = {
   appId: "1:667117683459:web:026bc5240a22e5a41e9f36"
 };
 
-// Connection refresh update
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
