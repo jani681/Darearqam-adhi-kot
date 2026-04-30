@@ -26,6 +26,7 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
+  // --- 1. Dashboard Stats Logic ---
   const fetchStats = async () => {
     try {
       const snap = await getDocs(collection(db, "ali_campus_records"));
@@ -40,11 +41,36 @@ function App() {
 
   useEffect(() => { if (isLoggedIn) fetchStats(); }, [isLoggedIn, view]);
 
-  const handleLogin = () => {
-    if(passInput === ADMIN_PASSWORD) setIsLoggedIn(true);
-    else alert("Wrong Password!");
+  // --- 2. Admission (SAVE) Logic ---
+  const handleSave = async () => {
+    if(!name || !rollNo) return alert("Please fill Name and Roll No");
+    setStatus('Saving...');
+    try {
+      await addDoc(collection(db, "ali_campus_records"), { 
+        student_name: name, 
+        roll_number: rollNo, 
+        class: selectedClass, 
+        fee_status: 'Unpaid', 
+        created_at: serverTimestamp() 
+      });
+      setName(''); setRollNo(''); setStatus('Registered Successfully!'); setView('dashboard');
+    } catch (e) { alert("Save Error: " + e.message); }
   };
 
+  // --- 3. History Fetch Logic ---
+  const fetchHistory = async () => {
+    setStatus('Loading History...');
+    try {
+      const q = query(collection(db, "daily_attendance"), orderBy("timestamp", "desc"));
+      const snap = await getDocs(q);
+      const historyData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setHistory(historyData);
+      setView('history');
+      setStatus('Success');
+    } catch (err) { setStatus('History Error'); }
+  };
+
+  // --- 4. Directory & Attendance Fetch ---
   const fetchRecordsByClass = async (target, cls) => {
     setStatus('Loading...');
     try {
@@ -55,8 +81,8 @@ function App() {
     } catch (e) { setStatus('Error'); }
   };
 
+  // --- 5. Edit/Delete/Fees Logic ---
   const handleUpdate = async () => {
-    setStatus('Updating...');
     try {
       await updateDoc(doc(db, "ali_campus_records", editingStudent.id), {
         student_name: editingStudent.student_name,
@@ -64,7 +90,6 @@ function App() {
       });
       setEditingStudent(null);
       fetchRecordsByClass('view', filterClass);
-      setStatus('Updated!');
     } catch (e) { alert(e.message); }
   };
 
@@ -73,7 +98,6 @@ function App() {
       await deleteDoc(doc(db, "ali_campus_records", id));
       setEditingStudent(null);
       fetchRecordsByClass('view', filterClass);
-      setStatus('Deleted');
     }
   };
 
@@ -81,6 +105,11 @@ function App() {
     const newStatus = student.fee_status === 'Paid' ? 'Unpaid' : 'Paid';
     await updateDoc(doc(db, "ali_campus_records", student.id), { fee_status: newStatus });
     fetchRecordsByClass('view', filterClass);
+  };
+
+  const handleLogin = () => {
+    if(passInput === ADMIN_PASSWORD) setIsLoggedIn(true);
+    else alert("Wrong Password!");
   };
 
   const filteredRecords = records.filter(r => 
@@ -106,13 +135,54 @@ function App() {
           <button onClick={() => setView('add')} style={navBtn}>Admission</button>
           <button onClick={() => setView('sel_view')} style={navBtn}>Directory</button>
           <button onClick={() => setView('sel_att')} style={navBtn}>Attendance</button>
-          <button onClick={() => setView('history')} style={navBtn}>History</button>
+          <button onClick={fetchHistory} style={navBtn}>History</button>
         </div>
       </div>
 
       <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
-        
-        {/* --- Directory View with Edit & Fees --- */}
+        <p style={{textAlign:'center', fontSize:'10px', color:'#666'}}>{status}</p>
+
+        {/* --- ADMISSION VIEW --- */}
+        {view === 'add' && (
+          <div style={cardStyle}>
+            <h3>Student Admission</h3>
+            <input placeholder="Student Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={handleSave} style={actionBtn}>Save Student</button>
+          </div>
+        )}
+
+        {/* --- HISTORY VIEW --- */}
+        {view === 'history' && (
+          <div>
+            <h3>Attendance History</h3>
+            {history.length === 0 ? <p>No records found.</p> : history.map(h => (
+              <div key={h.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <div><b>{h.date}</b><br/><small>{h.class}</small></div>
+                  <button style={{background:'#28a745', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px'}}>PDF</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* --- DASHBOARD --- */}
+        {view === 'dashboard' && (
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+            {CLASSES.map(c => (
+              <div key={c} style={cardStyle}>
+                <small style={{color:'#1a4a8e'}}>{c}</small>
+                <div style={{fontSize:'18px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* --- DIRECTORY --- */}
         {view === 'view' && !editingStudent && (
           <div>
             <h3>Directory: {filterClass}</h3>
@@ -125,16 +195,24 @@ function App() {
                     {r.fee_status || 'Unpaid'}
                   </button>
                 </div>
-                {/* Fixed: Edit Button is back! */}
-                <button onClick={() => setEditingStudent(r)} style={{marginTop:'10px', width:'100%', padding:'5px', background:'none', border:'1px solid #1a4a8e', color:'#1a4a8e', borderRadius:'5px', fontSize:'11px'}}>
-                  Edit Profile / Delete
-                </button>
+                <button onClick={() => setEditingStudent(r)} style={{marginTop:'10px', width:'100%', padding:'5px', background:'none', border:'1px solid #1a4a8e', color:'#1a4a8e', borderRadius:'5px', fontSize:'11px'}}>Edit Profile</button>
               </div>
             ))}
           </div>
         )}
 
-        {/* --- Edit Profile View --- */}
+        {/* --- CLASS SELECTION --- */}
+        {(view === 'sel_view' || view === 'sel_att') && (
+          <div style={cardStyle}>
+            <h3>Select Class</h3>
+            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open</button>
+          </div>
+        )}
+
+        {/* --- EDIT VIEW --- */}
         {editingStudent && (
           <div style={cardStyle}>
             <h3>Update Profile</h3>
@@ -145,29 +223,6 @@ function App() {
               <button onClick={() => handleDelete(editingStudent.id)} style={{flex:1, padding:'10px', background:'#dc3545', color:'white', border:'none', borderRadius:'5px'}}>Delete</button>
             </div>
             <button onClick={() => setEditingStudent(null)} style={{width:'100%', marginTop:'10px', background:'#ccc', border:'none', padding:'8px'}}>Cancel</button>
-          </div>
-        )}
-
-        {/* Dashboard Strength */}
-        {view === 'dashboard' && (
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
-            {CLASSES.map(c => (
-              <div key={c} style={cardStyle}>
-                <small style={{color:'#1a4a8e'}}>{c}</small>
-                <div style={{fontSize:'18px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Other views (Admission, Selection etc.) remain same */}
-        {(view === 'sel_view' || view === 'sel_att') && (
-          <div style={cardStyle}>
-            <h3>Select Class</h3>
-            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
-              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open</button>
           </div>
         )}
       </div>
