@@ -26,7 +26,7 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // --- 1. Dashboard Stats Logic ---
+  // --- 1. Dashboard Stats (Strength) ---
   const fetchStats = async () => {
     try {
       const snap = await getDocs(collection(db, "ali_campus_records"));
@@ -41,47 +41,62 @@ function App() {
 
   useEffect(() => { if (isLoggedIn) fetchStats(); }, [isLoggedIn, view]);
 
-  // --- 2. Admission (SAVE) Logic ---
-  const handleSave = async () => {
-    if(!name || !rollNo) return alert("Please fill Name and Roll No");
-    setStatus('Saving...');
-    try {
-      await addDoc(collection(db, "ali_campus_records"), { 
-        student_name: name, 
-        roll_number: rollNo, 
-        class: selectedClass, 
-        fee_status: 'Unpaid', 
-        created_at: serverTimestamp() 
-      });
-      setName(''); setRollNo(''); setStatus('Registered Successfully!'); setView('dashboard');
-    } catch (e) { alert("Save Error: " + e.message); }
-  };
-
-  // --- 3. History Fetch Logic ---
+  // --- 2. History Logic (Fixed Blank Screen) ---
   const fetchHistory = async () => {
     setStatus('Loading History...');
     try {
       const q = query(collection(db, "daily_attendance"), orderBy("timestamp", "desc"));
       const snap = await getDocs(q);
-      const historyData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setHistory(historyData);
+      setHistory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setView('history');
       setStatus('Success');
     } catch (err) { setStatus('History Error'); }
   };
 
-  // --- 4. Directory & Attendance Fetch ---
+  // --- 3. Save Attendance Logic ---
+  const saveAttendance = async () => {
+    if(Object.keys(attendance).length === 0) return alert("Mark some attendance first!");
+    setStatus('Saving Attendance...');
+    try {
+      await addDoc(collection(db, "daily_attendance"), {
+        class: filterClass,
+        date: today,
+        attendance_data: attendance,
+        timestamp: serverTimestamp()
+      });
+      setStatus('Attendance Saved!');
+      setAttendance({});
+      setView('dashboard');
+    } catch (e) { alert("Save Error"); }
+  };
+
+  // --- 4. Directory & Mark Attendance Logic ---
   const fetchRecordsByClass = async (target, cls) => {
     setStatus('Loading...');
     try {
       const q = query(collection(db, "ali_campus_records"), where("class", "==", cls));
       const snap = await getDocs(q);
       setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setSearchTerm(''); setView(target); setStatus('Success');
+      setSearchTerm(''); 
+      setView(target);
+      setStatus('Success');
     } catch (e) { setStatus('Error'); }
   };
 
-  // --- 5. Edit/Delete/Fees Logic ---
+  // --- 5. Admission Logic (SAVE) ---
+  const handleSave = async () => {
+    if(!name || !rollNo) return alert("Fill Name and Roll No");
+    setStatus('Saving...');
+    try {
+      await addDoc(collection(db, "ali_campus_records"), { 
+        student_name: name, roll_number: rollNo, class: selectedClass, 
+        fee_status: 'Unpaid', created_at: serverTimestamp() 
+      });
+      setName(''); setRollNo(''); setStatus('Registered!'); setView('dashboard');
+    } catch (e) { alert(e.message); }
+  };
+
+  // --- 6. Edit/Delete/Fees ---
   const handleUpdate = async () => {
     try {
       await updateDoc(doc(db, "ali_campus_records", editingStudent.id), {
@@ -94,7 +109,7 @@ function App() {
   };
 
   const handleDelete = async (id) => {
-    if(window.confirm("Delete this student?")) {
+    if(window.confirm("Delete student?")) {
       await deleteDoc(doc(db, "ali_campus_records", id));
       setEditingStudent(null);
       fetchRecordsByClass('view', filterClass);
@@ -142,34 +157,6 @@ function App() {
       <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
         <p style={{textAlign:'center', fontSize:'10px', color:'#666'}}>{status}</p>
 
-        {/* --- ADMISSION VIEW --- */}
-        {view === 'add' && (
-          <div style={cardStyle}>
-            <h3>Student Admission</h3>
-            <input placeholder="Student Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
-            <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
-            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
-              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={handleSave} style={actionBtn}>Save Student</button>
-          </div>
-        )}
-
-        {/* --- HISTORY VIEW --- */}
-        {view === 'history' && (
-          <div>
-            <h3>Attendance History</h3>
-            {history.length === 0 ? <p>No records found.</p> : history.map(h => (
-              <div key={h.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                  <div><b>{h.date}</b><br/><small>{h.class}</small></div>
-                  <button style={{background:'#28a745', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px'}}>PDF</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* --- DASHBOARD --- */}
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
@@ -182,6 +169,23 @@ function App() {
           </div>
         )}
 
+        {/* --- ATTENDANCE MARKING --- */}
+        {view === 'attendance' && (
+          <div>
+            <h3>Marking: {filterClass}</h3>
+            {filteredRecords.map(r => (
+              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between'}}>
+                <span>{r.student_name}</span>
+                <div>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc'}}>P</button>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc'}}>A</button>
+                </div>
+              </div>
+            ))}
+            <button onClick={saveAttendance} style={actionBtn}>Submit Attendance</button>
+          </div>
+        )}
+
         {/* --- DIRECTORY --- */}
         {view === 'view' && !editingStudent && (
           <div>
@@ -189,7 +193,7 @@ function App() {
             <input placeholder="🔍 Search..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {filteredRecords.map(r => (
               <div key={r.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div style={{display:'flex', justifyContent:'space-between'}}>
                   <div><b>{r.student_name}</b> <br/> <small>Roll: {r.roll_number}</small></div>
                   <button onClick={() => toggleFeeStatus(r)} style={{padding:'5px 10px', fontSize:'10px', background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px'}}>
                     {r.fee_status || 'Unpaid'}
@@ -201,7 +205,35 @@ function App() {
           </div>
         )}
 
-        {/* --- CLASS SELECTION --- */}
+        {/* --- ADMISSION --- */}
+        {view === 'add' && (
+          <div style={cardStyle}>
+            <h3>Admission</h3>
+            <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll No" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={handleSave} style={actionBtn}>Save</button>
+          </div>
+        )}
+
+        {/* --- HISTORY --- */}
+        {view === 'history' && (
+          <div>
+            <h3>Reports</h3>
+            {history.map(h => (
+              <div key={h.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between'}}>
+                  <div><b>{h.date}</b><br/><small>{h.class}</small></div>
+                  <button style={{background:'#28a745', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px'}}>PDF</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* --- CLASS SELECTOR --- */}
         {(view === 'sel_view' || view === 'sel_att') && (
           <div style={cardStyle}>
             <h3>Select Class</h3>
@@ -212,7 +244,7 @@ function App() {
           </div>
         )}
 
-        {/* --- EDIT VIEW --- */}
+        {/* --- EDIT STUDENT --- */}
         {editingStudent && (
           <div style={cardStyle}>
             <h3>Update Profile</h3>
@@ -233,6 +265,7 @@ function App() {
 const navBtn = { padding: '8px 10px', borderRadius: '5px', border: 'none', fontWeight: 'bold', backgroundColor: '#fff', color: '#1a4a8e', fontSize: '11px', cursor: 'pointer' };
 const cardStyle = { background: 'white', padding: '15px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '10px' };
 const inputStyle = { width: '100%', padding: '10px', margin: '5px 0', borderRadius: '5px', border: '1px solid #ddd', boxSizing: 'border-box' };
-const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold' };
+const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', marginTop:'10px' };
+const statusBtn = { marginLeft: '5px', padding: '6px 12px', border: 'none', borderRadius: '4px', color: 'white' };
 
 export default App;
