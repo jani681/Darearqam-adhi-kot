@@ -25,7 +25,7 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Navigation Logic
+  // Keyboard-Style Navigation Styling
   const getNavStyle = (targetView) => ({
     padding: '12px 5px',
     borderRadius: '10px',
@@ -36,7 +36,7 @@ function App() {
     transition: 'all 0.1s ease',
     boxShadow: view === targetView ? 'inset 0 4px 6px rgba(0,0,0,0.2)' : '0 4px 0 #bdc3c7',
     backgroundColor: view === targetView ? '#f39c12' : '#ffffff',
-    color: view === targetView ? '#1a4a8e' : '#1a4a8e',
+    color: '#1a4a8e',
     transform: view === targetView ? 'translateY(2px)' : 'none',
   });
 
@@ -78,14 +78,23 @@ function App() {
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <h3>Ali Campus Login</h3>
       <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'10px', borderRadius:'5px'}} />
-      <button onClick={() => passInput === ADMIN_PASSWORD ? setIsLoggedIn(true) : alert("Wrong Password")} style={{marginTop:'10px', padding:'10px 20px', borderRadius:'5px', border:'none'}}>Login</button>
+      <button onClick={() => passInput === ADMIN_PASSWORD ? setIsLoggedIn(true) : alert("Wrong Password")} style={{marginTop:'10px', padding:'10px 20px', borderRadius:'5px', border:'none', background:'white', color:'#1a4a8e', fontWeight:'bold'}}>Login</button>
     </div>
   );
 
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
+      {/* --- HEADER WITH LOGO & NAV --- */}
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center' }}>
-        <h2 style={{ color: 'white', marginBottom: '15px', fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
+          <img 
+            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6A7yqMIdf2hC6Bv06-kS94h8EAnL4_iL48w&s" 
+            alt="Logo" 
+            style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'white', padding: '2px' }} 
+          />
+          <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
+        </div>
+        
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
           <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
           <button onClick={() => setView('add')} style={getNavStyle('add')}>📝 Admission</button>
@@ -99,14 +108,14 @@ function App() {
       <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
         <p style={{textAlign:'center', fontSize:'10px', color:'#666', marginBottom:'10px'}}>{status}</p>
 
-        {/* DASHBOARD WITH CLICKABLE CARDS */}
+        {/* DASHBOARD: CLICKABLE CLASS CARDS */}
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px'}}>
             {CLASSES.map(c => (
               <div key={c} 
                    onClick={() => fetchRecordsByClass('view', c)} 
-                   style={{...cardStyle, cursor:'pointer', borderLeft:'5px solid #f39c12', transition:'0.2s'}}
-                   onPointerDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+                   style={{...cardStyle, cursor:'pointer', borderLeft:'5px solid #f39c12'}}
+                   onPointerDown={(e) => e.currentTarget.style.transform = 'scale(0.96)'}
                    onPointerUp={(e) => e.currentTarget.style.transform = 'scale(1)'}>
                 <small style={{color:'#1a4a8e', fontWeight:'bold'}}>{c}</small>
                 <div style={{fontSize:'22px', fontWeight:'bold', marginTop:'5px'}}>{classStats[c] || 0}</div>
@@ -121,7 +130,7 @@ function App() {
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
                <h3 style={{margin:0}}>{filterClass}</h3>
-               <button onClick={() => fetchRecordsByClass('attendance', filterClass)} style={{padding:'5px 10px', fontSize:'11px', background:'#28a745', color:'white', border:'none', borderRadius:'5px'}}>Mark Attendance</button>
+               <button onClick={() => fetchRecordsByClass('attendance', filterClass)} style={{padding:'6px 12px', fontSize:'11px', background:'#28a745', color:'white', border:'none', borderRadius:'5px', fontWeight:'bold'}}>Mark Attendance</button>
             </div>
             <input placeholder="🔍 Search Students..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
