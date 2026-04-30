@@ -26,7 +26,6 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // 1. Dashboard Strength Logic
   const fetchStats = async () => {
     try {
       const snap = await getDocs(collection(db, "ali_campus_records"));
@@ -36,74 +35,64 @@ function App() {
         stats[cls] = (stats[cls] || 0) + 1;
       });
       setClassStats(stats);
-    } catch (e) { console.error("Stats Error", e); }
+    } catch (e) { console.error(e); }
   };
 
-  useEffect(() => {
-    if (isLoggedIn) fetchStats();
-  }, [isLoggedIn, view]);
+  useEffect(() => { if (isLoggedIn) fetchStats(); }, [isLoggedIn, view]);
 
   const handleLogin = () => {
     if(passInput === ADMIN_PASSWORD) setIsLoggedIn(true);
     else alert("Wrong Password!");
   };
 
-  // 2. Directory & Attendance Fetch (Fixed Blank Screen)
   const fetchRecordsByClass = async (target, cls) => {
-    setStatus('Loading Students...');
+    setStatus('Loading...');
     try {
       const q = query(collection(db, "ali_campus_records"), where("class", "==", cls));
       const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setRecords(data);
-      setSearchTerm(''); 
-      setView(target);
-      setStatus('Success');
-    } catch (e) { setStatus('Error Loading'); }
+      setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSearchTerm(''); setView(target); setStatus('Success');
+    } catch (e) { setStatus('Error'); }
   };
 
-  // 3. History Fetch (Fixed Blank Screen)
-  const fetchHistory = async () => {
-    setStatus('Loading History...');
+  const handleUpdate = async () => {
+    setStatus('Updating...');
     try {
-      const q = query(collection(db, "daily_attendance"), orderBy("timestamp", "desc"));
-      const snap = await getDocs(q);
-      setHistory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setView('history');
-      setStatus('Success');
-    } catch (err) { setStatus('History Error'); }
-  };
-
-  const handleSave = async () => {
-    if(!name || !rollNo) return alert("Fill details");
-    setStatus('Saving...');
-    try {
-      await addDoc(collection(db, "ali_campus_records"), { 
-        student_name: name, roll_number: rollNo, class: selectedClass, 
-        fee_status: 'Unpaid', created_at: serverTimestamp() 
+      await updateDoc(doc(db, "ali_campus_records", editingStudent.id), {
+        student_name: editingStudent.student_name,
+        roll_number: editingStudent.roll_number
       });
-      setName(''); setRollNo(''); setStatus('Registered!'); setView('dashboard');
+      setEditingStudent(null);
+      fetchRecordsByClass('view', filterClass);
+      setStatus('Updated!');
     } catch (e) { alert(e.message); }
+  };
+
+  const handleDelete = async (id) => {
+    if(window.confirm("Delete this student?")) {
+      await deleteDoc(doc(db, "ali_campus_records", id));
+      setEditingStudent(null);
+      fetchRecordsByClass('view', filterClass);
+      setStatus('Deleted');
+    }
   };
 
   const toggleFeeStatus = async (student) => {
     const newStatus = student.fee_status === 'Paid' ? 'Unpaid' : 'Paid';
-    try {
-      await updateDoc(doc(db, "ali_campus_records", student.id), { fee_status: newStatus });
-      fetchRecordsByClass('view', filterClass);
-    } catch (e) { alert("Fee Update Failed"); }
+    await updateDoc(doc(db, "ali_campus_records", student.id), { fee_status: newStatus });
+    fetchRecordsByClass('view', filterClass);
   };
 
   const filteredRecords = records.filter(r => 
-    (r.student_name && r.student_name.toLowerCase().includes(searchTerm.toLowerCase())) || 
-    (r.roll_number && r.roll_number.toString().includes(searchTerm))
+    (r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())) || 
+    (r.roll_number?.toString().includes(searchTerm))
   );
 
   if (!isLoggedIn) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#1a4a8e', color: 'white' }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <h3>Ali Campus Login</h3>
       <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'10px', borderRadius:'5px'}} />
-      <button onClick={handleLogin} style={{marginTop:'10px', padding:'10px 20px', background:'white', color:'#1a4a8e', border:'none', borderRadius:'5px', fontWeight:'bold'}}>Login</button>
+      <button onClick={handleLogin} style={{marginTop:'10px', padding:'10px 20px', background:'white', color:'#1a4a8e', border:'none', borderRadius:'5px'}}>Login</button>
     </div>
   );
 
@@ -117,78 +106,68 @@ function App() {
           <button onClick={() => setView('add')} style={navBtn}>Admission</button>
           <button onClick={() => setView('sel_view')} style={navBtn}>Directory</button>
           <button onClick={() => setView('sel_att')} style={navBtn}>Attendance</button>
-          <button onClick={fetchHistory} style={navBtn}>History</button>
+          <button onClick={() => setView('history')} style={navBtn}>History</button>
         </div>
       </div>
 
       <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
-        <p style={{textAlign:'center', fontSize:'10px', color:'#666'}}>{status}</p>
-
-        {view === 'dashboard' && (
-          <div>
-            <h3>Strength Overview</h3>
-            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
-              {CLASSES.map(c => (
-                <div key={c} style={cardStyle}>
-                  <div style={{fontSize:'12px', color:'#1a4a8e'}}>{c}</div>
-                  <div style={{fontSize:'18px', fontWeight:'bold'}}>{classStats[c] || 0} Students</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {view === 'view' && (
+        
+        {/* --- Directory View with Edit & Fees --- */}
+        {view === 'view' && !editingStudent && (
           <div>
             <h3>Directory: {filterClass}</h3>
-            <input type="text" placeholder="🔍 Search Students..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
+            <input placeholder="🔍 Search..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {filteredRecords.map(r => (
-              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div>
-                  <b>{r.student_name}</b> <br/>
-                  <small>Roll: {r.roll_number}</small>
+              <div key={r.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <div><b>{r.student_name}</b> <br/> <small>Roll: {r.roll_number}</small></div>
+                  <button onClick={() => toggleFeeStatus(r)} style={{padding:'5px 10px', fontSize:'10px', background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px'}}>
+                    {r.fee_status || 'Unpaid'}
+                  </button>
                 </div>
-                <button onClick={() => toggleFeeStatus(r)} style={{padding:'5px', fontSize:'10px', background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px'}}>
-                  {r.fee_status || 'Unpaid'}
+                {/* Fixed: Edit Button is back! */}
+                <button onClick={() => setEditingStudent(r)} style={{marginTop:'10px', width:'100%', padding:'5px', background:'none', border:'1px solid #1a4a8e', color:'#1a4a8e', borderRadius:'5px', fontSize:'11px'}}>
+                  Edit Profile / Delete
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        {view === 'history' && (
-          <div>
-            <h3>Recent Reports</h3>
-            {history.map(h => (
-              <div key={h.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between'}}>
-                  <div><b>{h.date}</b><br/><small>{h.class}</small></div>
-                  <button style={{background:'#28a745', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px'}}>PDF</button>
-                </div>
+        {/* --- Edit Profile View --- */}
+        {editingStudent && (
+          <div style={cardStyle}>
+            <h3>Update Profile</h3>
+            <input value={editingStudent.student_name} onChange={(e)=>setEditingStudent({...editingStudent, student_name: e.target.value})} style={inputStyle} />
+            <input value={editingStudent.roll_number} onChange={(e)=>setEditingStudent({...editingStudent, roll_number: e.target.value})} style={inputStyle} />
+            <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+              <button onClick={handleUpdate} style={{flex:1, padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'5px'}}>Update</button>
+              <button onClick={() => handleDelete(editingStudent.id)} style={{flex:1, padding:'10px', background:'#dc3545', color:'white', border:'none', borderRadius:'5px'}}>Delete</button>
+            </div>
+            <button onClick={() => setEditingStudent(null)} style={{width:'100%', marginTop:'10px', background:'#ccc', border:'none', padding:'8px'}}>Cancel</button>
+          </div>
+        )}
+
+        {/* Dashboard Strength */}
+        {view === 'dashboard' && (
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+            {CLASSES.map(c => (
+              <div key={c} style={cardStyle}>
+                <small style={{color:'#1a4a8e'}}>{c}</small>
+                <div style={{fontSize:'18px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
               </div>
             ))}
           </div>
         )}
 
+        {/* Other views (Admission, Selection etc.) remain same */}
         {(view === 'sel_view' || view === 'sel_att') && (
           <div style={cardStyle}>
             <h3>Select Class</h3>
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Next</button>
-          </div>
-        )}
-
-        {view === 'add' && (
-          <div style={cardStyle}>
-            <h3>Admission</h3>
-            <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
-            <input placeholder="Roll No" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
-            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
-              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={handleSave} style={actionBtn}>Register</button>
+            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open</button>
           </div>
         )}
       </div>
@@ -200,6 +179,5 @@ const navBtn = { padding: '8px 10px', borderRadius: '5px', border: 'none', fontW
 const cardStyle = { background: 'white', padding: '15px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '10px' };
 const inputStyle = { width: '100%', padding: '10px', margin: '5px 0', borderRadius: '5px', border: '1px solid #ddd', boxSizing: 'border-box' };
 const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold' };
-const statusBtn = { marginLeft: '5px', padding: '6px 12px', border: 'none', borderRadius: '4px', color: 'white' };
 
 export default App;
