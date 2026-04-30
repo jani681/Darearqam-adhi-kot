@@ -1,54 +1,60 @@
 import React, { useState } from 'react';
-import { db, storage } from './firebase';
+import { db } from './firebase';
 import { collection, addDoc, serverTimestamp } from "firebase/firestore"; 
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 function App() {
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
-  const [status, setStatus] = useState('System Ready');
+  const [image, setImage] = useState("");
+  const [status, setStatus] = useState('System Online (Adhi Kot)');
 
-  const saveStudentData = async () => {
-    if(!name || !rollNo) return alert("Please fill Name and Roll No");
+  // Image ko text mein badalne ka function
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onloadend = () => setImage(reader.result);
+    if (file) reader.readAsDataURL(file);
+  };
 
+  const handleSave = async () => {
+    if(!name || !rollNo) return alert("Pehle Name aur Roll No likhen!");
+    
     try {
-      setStatus('Saving Student Info...');
-      
-      // Saving Text Data to Firestore
+      setStatus('Saving to Cloud...');
       await addDoc(collection(db, "ali_campus_records"), {
         student_name: name,
         roll_number: rollNo,
-        created_at: serverTimestamp(),
-        has_media: false
+        photo_data: image, // Photo ab seedha yahan save hogi
+        created_at: serverTimestamp()
       });
 
-      setStatus('Success! Text Data Saved.');
-      alert("Student Added! Now you can plan for images/videos.");
-      setName('');
-      setRollNo('');
-    } catch (error) {
-      console.error(error);
-      setStatus('Error: ' + error.code);
-      alert("Error: " + error.message);
+      setStatus('Success! Profile Saved.');
+      alert("Student ka record image ke sath save ho gaya!");
+      setName(''); setRollNo(''); setImage("");
+    } catch (err) {
+      setStatus('Error!');
+      alert("Database Error: " + err.message);
     }
   }
 
   return (
-    <div style={{ textAlign: 'center', padding: '20px', backgroundColor: '#f4f7f6', minHeight: '100vh', fontFamily: 'Arial' }}>
-      <h2 style={{ color: '#1a4a8e' }}>Ali Campus Admin Portal</h2>
-      <p style={{ color: 'green', fontWeight: 'bold' }}>{status}</p>
+    <div style={{ textAlign: 'center', padding: '20px', minHeight: '100vh', backgroundColor: '#eef2f3', fontFamily: 'Arial' }}>
+      <h2 style={{ color: '#1a4a8e' }}>Ali Campus - Adhi Kot Portal</h2>
+      <p style={{ color: 'blue' }}>{status}</p>
       
-      <div style={{ maxWidth: '400px', margin: 'auto', padding: '25px', background: 'white', borderRadius: '15px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-        <h3>Add New Student</h3>
-        <input placeholder="Student Name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: '90%', padding: '12px', marginBottom: '10px', borderRadius: '8px', border: '1px solid #ddd' }} /><br/>
-        <input placeholder="Roll Number" value={rollNo} onChange={(e) => setRollNo(e.target.value)} style={{ width: '90%', padding: '12px', marginBottom: '20px', borderRadius: '8px', border: '1px solid #ddd' }} /><br/>
+      <div style={{ maxWidth: '400px', margin: 'auto', background: 'white', padding: '25px', borderRadius: '15px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
+        <input placeholder="Student Name" value={name} onChange={(e)=>setName(e.target.value)} style={{ width: '90%', marginBottom: '15px', padding: '12px', borderRadius: '8px', border: '1px solid #ddd' }} />
+        <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={{ width: '90%', marginBottom: '15px', padding: '12px', borderRadius: '8px', border: '1px solid #ddd' }} />
         
-        <div style={{ padding: '10px', border: '1px dashed #1a4a8e', marginBottom: '20px', borderRadius: '8px' }}>
-          <p style={{ fontSize: '12px', color: '#666' }}>Images/Video upload feature coming soon...</p>
+        <div style={{ margin: '15px 0', textAlign: 'left' }}>
+          <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Upload Student Photo:</label>
+          <input type="file" accept="image/*" onChange={handleImageChange} style={{ marginTop: '10px' }} />
         </div>
 
-        <button onClick={saveStudentData} style={{ width: '100%', padding: '15px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '16px' }}>
-          Save to Database
+        {image && <img src={image} alt="preview" style={{ width: '100px', marginBottom: '10px', borderRadius: '8px' }} />}
+
+        <button onClick={handleSave} style={{ width: '100%', padding: '15px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>
+          Save Student to Database
         </button>
       </div>
     </div>
