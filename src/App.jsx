@@ -25,7 +25,6 @@ function App() {
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
   const [editingStudent, setEditingStudent] = useState(null);
 
-  // New States for Monthly Report
   const [monthlyData, setMonthlyData] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
@@ -41,8 +40,8 @@ function App() {
     doc.text(`Class: ${record.class}`, 14, 25);
     doc.text(`Date: ${record.date}`, 14, 32);
     const tableRows = [];
-    Object.entries(record.attendance_data).forEach(([name, status], index) => {
-      tableRows.push([index + 1, name, status === 'P' ? 'Present' : 'Absent']);
+    Object.entries(record.attendance_data).forEach(([stdName, stdStatus], index) => {
+      tableRows.push([index + 1, stdName, stdStatus === 'P' ? 'Present' : 'Absent']);
     });
     doc.autoTable({
       startY: 40,
@@ -59,12 +58,12 @@ function App() {
       const q = query(collection(db, "daily_attendance"), where("class", "==", cls));
       const snap = await getDocs(q);
       const summary = {};
-      snap.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.date.startsWith(selectedMonth)) {
-          Object.entries(data.attendance_data).forEach(([name, status]) => {
-            if (!summary[name]) summary[name] = { p: 0, a: 0 };
-            if (status === 'P') summary[name].p++; else summary[name].a++;
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.date && data.date.startsWith(selectedMonth)) {
+          Object.entries(data.attendance_data).forEach(([stdName, stdStatus]) => {
+            if (!summary[stdName]) summary[stdName] = { p: 0, a: 0 };
+            if (stdStatus === 'P') summary[stdName].p++; else summary[stdName].a++;
           });
         }
       });
@@ -73,18 +72,6 @@ function App() {
       setStatus('Success');
     } catch (e) { setStatus('Error'); }
   };
-
-  const getNavStyle = (targetView) => ({
-    padding: '12px 5px',
-    borderRadius: '10px',
-    border: 'none',
-    fontWeight: 'bold',
-    fontSize: '11px',
-    cursor: 'pointer',
-    backgroundColor: view === targetView ? '#f39c12' : '#ffffff',
-    color: '#1a4a8e',
-    boxShadow: view === targetView ? 'inset 0 4px 6px rgba(0,0,0,0.2)' : '0 4px 0 #bdc3c7',
-  });
 
   const fetchStats = async () => {
     try {
@@ -102,7 +89,7 @@ function App() {
     try {
       const q = query(collection(db, "daily_attendance"), orderBy("timestamp", "desc"));
       const snap = await getDocs(q);
-      setHistory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setView('history');
       setStatus('Success');
     } catch (err) { setStatus('Error'); }
@@ -120,6 +107,18 @@ function App() {
     } catch (e) { setStatus('Error'); }
   };
 
+  const getNavStyle = (targetView) => ({
+    padding: '12px 5px',
+    borderRadius: '10px',
+    border: 'none',
+    fontWeight: 'bold',
+    fontSize: '10px',
+    cursor: 'pointer',
+    backgroundColor: view === targetView ? '#f39c12' : '#ffffff',
+    color: '#1a4a8e',
+    boxShadow: view === targetView ? 'inset 0 4px 6px rgba(0,0,0,0.2)' : '0 4px 0 #bdc3c7',
+  });
+
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <h3>Ali Campus Login</h3>
@@ -132,10 +131,10 @@ function App() {
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
-          <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', padding: '2px' }} onError={(e) => { e.target.src = "https://cdn-icons-png.flaticon.com/512/167/167707.png" }} />
+          <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', padding: '2px' }} />
           <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
           <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
           <button onClick={() => setView('add')} style={getNavStyle('add')}>📝 Admission</button>
           <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Directory</button>
@@ -145,16 +144,15 @@ function App() {
         </div>
       </div>
 
-      <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
-        <p style={{textAlign:'center', fontSize:'10px', color:'#666', marginBottom:'10px'}}>{status}</p>
+      <div style={{ padding: '15px', maxWidth: '600px', margin: 'auto' }}>
+        <p style={{textAlign:'center', fontSize:'10px', color:'#666'}}>{status}</p>
 
         {view === 'dashboard' && (
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px'}}>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
             {CLASSES.map(c => (
-              <div key={c} onClick={() => fetchRecordsByClass('view', c)} style={{...cardStyle, borderLeft:'5px solid #f39c12'}}>
+              <div key={c} onClick={() => fetchRecordsByClass('view', c)} style={{...cardStyle, borderLeft:'5px solid #f39c12', cursor:'pointer'}}>
                 <small style={{color:'#1a4a8e', fontWeight:'bold'}}>{c}</small>
-                <div style={{fontSize:'22px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
-                <div style={{fontSize:'10px', color:'#999', textAlign:'right'}}>View →</div>
+                <div style={{fontSize:'20px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
               </div>
             ))}
           </div>
@@ -163,7 +161,6 @@ function App() {
         {view === 'sel_report' && (
           <div style={cardStyle}>
             <h3>Monthly Report</h3>
-            <label style={{fontSize:'12px'}}>Select Month:</label>
             <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -176,37 +173,35 @@ function App() {
           <div>
             <h3 style={{textAlign:'center'}}>{filterClass} - {selectedMonth}</h3>
             <div style={{background:'white', borderRadius:'12px', padding:'10px', overflowX:'auto'}}>
-              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
-                <thead style={{borderBottom:'2px solid #eee'}}>
-                  <tr><th style={{padding:'8px', textAlign:'left'}}>Name</th><th style={{padding:'8px'}}>P</th><th style={{padding:'8px', color:'red'}}>A</th><th style={{padding:'8px'}}>%</th></tr>
+              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'12px'}}>
+                <thead>
+                  <tr style={{borderBottom:'2px solid #eee'}}><th style={{textAlign:'left'}}>Name</th><th>P</th><th style={{color:'red'}}>A</th><th>%</th></tr>
                 </thead>
                 <tbody>
-                  {monthlyData.map(([name, stats]) => (
-                    <tr key={name} style={{borderBottom:'1px solid #eee'}}>
-                      <td style={{padding:'8px'}}><b>{name}</b></td>
-                      <td style={{padding:'8px', textAlign:'center'}}>{stats.p}</td>
-                      <td style={{padding:'8px', textAlign:'center', color:'red'}}>{stats.a}</td>
-                      <td style={{padding:'8px', textAlign:'center', fontWeight:'bold'}}>{((stats.p / (stats.p+stats.a))*100).toFixed(0)}%</td>
+                  {monthlyData.map(([stdName, stats]) => (
+                    <tr key={stdName} style={{borderBottom:'1px solid #eee'}}>
+                      <td style={{padding:'8px'}}><b>{stdName}</b></td>
+                      <td style={{textAlign:'center'}}>{stats.p}</td>
+                      <td style={{textAlign:'center', color:'red'}}>{stats.a}</td>
+                      <td style={{textAlign:'center', fontWeight:'bold'}}>{((stats.p / (stats.p+stats.a))*100).toFixed(0)}%</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#666'}}>Back Home</button>
+            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#666'}}>Back</button>
           </div>
         )}
 
+        {/* ... baaki views (view, attendance, history, add) bilkul code V5 ki tarah yahan paste honge ... */}
         {view === 'view' && !editingStudent && (
           <div>
             <input placeholder="🔍 Search..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
-              <div key={r.id} style={{...cardStyle, backgroundColor: r.fee_status === 'Paid' ? '#f0fff4' : '#fff5f5', borderLeft: r.fee_status === 'Paid' ? '5px solid #28a745' : '5px solid #dc3545'}}>
+              <div key={r.id} style={{...cardStyle, borderLeft: r.fee_status === 'Paid' ? '5px solid #28a745' : '5px solid #dc3545'}}>
                 <div style={{display:'flex', justifyContent:'space-between'}}>
                   <div><b>{r.student_name}</b> <br/> <small>Roll: {r.roll_number}</small></div>
-                  <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
-                    <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", r.id), { fee_status: r.fee_status === 'Paid' ? 'Unpaid' : 'Paid' }); fetchRecordsByClass('view', filterClass); }} style={{padding:'4px 8px', fontSize:'10px', background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px'}}>{r.fee_status || 'Unpaid'}</button>
-                    <a href={`https://wa.me/${r.parent_whatsapp}?text=${encodeURIComponent(`Dear Parent, your child ${r.student_name}'s fee is ${r.fee_status || 'Unpaid'}. Regards: Ali Campus.`)}`} target="_blank" rel="noreferrer" style={{background:'#25D366', color:'white', padding:'4px 8px', borderRadius:'5px', textDecoration:'none', fontSize:'10px', textAlign:'center'}}>WhatsApp</a>
-                  </div>
+                  <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", r.id), { fee_status: r.fee_status === 'Paid' ? 'Unpaid' : 'Paid' }); fetchRecordsByClass('view', filterClass); }} style={{background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>{r.fee_status || 'Unpaid'}</button>
                 </div>
               </div>
             ))}
@@ -215,28 +210,26 @@ function App() {
 
         {view === 'attendance' && (
           <div>
-            <h3 style={{textAlign:'center'}}>Marking: {filterClass}</h3>
             {records.map(r => (
-              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', backgroundColor: attendance[r.student_name] === 'P' ? '#f0fff4' : attendance[r.student_name] === 'A' ? '#fff5f5' : 'white', borderRight: attendance[r.student_name] === 'P' ? '8px solid #28a745' : attendance[r.student_name] === 'A' ? '8px solid #dc3545' : 'none'}}>
-                <span style={{fontWeight:'bold'}}>{r.student_name}</span>
-                <div style={{display:'flex', gap:'8px'}}>
-                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc'}}>P</button>
-                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc'}}>A</button>
+              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', backgroundColor: attendance[r.student_name] === 'P' ? '#f0fff4' : attendance[r.student_name] === 'A' ? '#fff5f5' : 'white'}}>
+                <span>{r.student_name}</span>
+                <div style={{display:'flex', gap:'5px'}}>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{background: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc', color:'white', border:'none', padding:'8px', borderRadius:'5px'}}>P</button>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{background: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc', color:'white', border:'none', padding:'8px', borderRadius:'5px'}}>A</button>
                 </div>
               </div>
             ))}
-            <button disabled={Object.keys(attendance).length === 0} onClick={async () => { await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); }} style={actionBtn}>Submit Attendance</button>
+            <button disabled={Object.keys(attendance).length === 0} onClick={async () => { await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); }} style={actionBtn}>Save</button>
           </div>
         )}
 
         {view === 'history' && (
           <div>
-            <h3>History</h3>
             {history.map(h => (
               <div key={h.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                  <div><b>{h.date}</b><br/><small>{h.class}</small></div>
-                  <button onClick={() => downloadPDF(h)} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px'}}>📥 PDF</button>
+                <div style={{display:'flex', justifyContent:'space-between'}}>
+                  <span><b>{h.date}</b> ({h.class})</span>
+                  <button onClick={() => downloadPDF(h)} style={{background:'#1a4a8e', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px'}}>PDF</button>
                 </div>
               </div>
             ))}
@@ -245,24 +238,23 @@ function App() {
 
         {view === 'add' && (
           <div style={cardStyle}>
-            <h3>Admission</h3>
+            <h3>New Admission</h3>
             <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
             <input placeholder="Roll" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
             <input placeholder="WhatsApp" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
             <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={async () => { await addDoc(collection(db, "ali_campus_records"), { student_name: name, roll_number: rollNo, parent_whatsapp: whatsapp, class: selectedClass, fee_status: 'Unpaid', created_at: serverTimestamp() }); setView('dashboard'); setName(''); setRollNo(''); setWhatsapp(''); }} style={actionBtn}>Register Student</button>
+            <button onClick={async () => { await addDoc(collection(db, "ali_campus_records"), { student_name: name, roll_number: rollNo, parent_whatsapp: whatsapp, class: selectedClass, fee_status: 'Unpaid', created_at: serverTimestamp() }); setView('dashboard'); setName(''); setRollNo(''); setWhatsapp(''); }} style={actionBtn}>Register</button>
           </div>
         )}
 
         {(view === 'sel_view' || view === 'sel_att') && (
           <div style={cardStyle}>
-            <h3>Select Class</h3>
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open Class</button>
+            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open</button>
           </div>
         )}
       </div>
@@ -270,9 +262,9 @@ function App() {
   );
 }
 
-const cardStyle = { background: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: '12px' };
-const inputStyle = { width: '100%', padding: '12px', margin: '8px 0', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' };
-const actionBtn = { width: '100%', padding: '15px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginTop:'10px' };
-const statusBtn = { padding: '10px 20px', border: 'none', borderRadius: '8px', color: 'white', fontWeight: 'bold' };
+const cardStyle = { background: 'white', padding: '12px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '10px' };
+const inputStyle = { width: '100%', padding: '10px', margin: '5px 0', borderRadius: '8px', border: '1px solid #ddd' };
+const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' };
+const statusBtn = { padding: '8px 15px', border: 'none', borderRadius: '5px', color: 'white' }; // unused but kept for structure
 
 export default App;
