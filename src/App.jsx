@@ -84,13 +84,14 @@ function App() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
-      {/* --- HEADER WITH LOGO & NAV --- */}
+      {/* --- HEADER WITH FIXED LOGO & NAV --- */}
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
           <img 
-            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6A7yqMIdf2hC6Bv06-kS94h8EAnL4_iL48w&s" 
+            src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" 
             alt="Logo" 
-            style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'white', padding: '2px' }} 
+            style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', padding: '2px', objectFit: 'contain' }} 
+            onError={(e) => { e.target.src = "https://cdn-icons-png.flaticon.com/512/167/167707.png" }}
           />
           <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         </div>
