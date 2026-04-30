@@ -25,10 +25,10 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // --- Dynamic Button Styling (Keyboard Effect) ---
+  // Navigation Logic
   const getNavStyle = (targetView) => ({
     padding: '12px 5px',
-    borderRadius: '8px',
+    borderRadius: '10px',
     border: 'none',
     fontWeight: 'bold',
     fontSize: '11px',
@@ -36,7 +36,7 @@ function App() {
     transition: 'all 0.1s ease',
     boxShadow: view === targetView ? 'inset 0 4px 6px rgba(0,0,0,0.2)' : '0 4px 0 #bdc3c7',
     backgroundColor: view === targetView ? '#f39c12' : '#ffffff',
-    color: view === targetView ? 'white' : '#1a4a8e',
+    color: view === targetView ? '#1a4a8e' : '#1a4a8e',
     transform: view === targetView ? 'translateY(2px)' : 'none',
   });
 
@@ -63,8 +63,9 @@ function App() {
   };
 
   const fetchRecordsByClass = async (target, cls) => {
-    setStatus('Loading...');
+    setStatus(`Opening ${cls}...`);
     try {
+      setFilterClass(cls);
       const q = query(collection(db, "ali_campus_records"), where("class", "==", cls));
       const snap = await getDocs(q);
       setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -77,13 +78,12 @@ function App() {
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <h3>Ali Campus Login</h3>
       <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'10px', borderRadius:'5px'}} />
-      <button onClick={() => passInput === ADMIN_PASSWORD ? setIsLoggedIn(true) : alert("Wrong!")} style={{marginTop:'10px', padding:'10px 20px', borderRadius:'5px', border:'none', fontWeight:'bold'}}>Login</button>
+      <button onClick={() => passInput === ADMIN_PASSWORD ? setIsLoggedIn(true) : alert("Wrong Password")} style={{marginTop:'10px', padding:'10px 20px', borderRadius:'5px', border:'none'}}>Login</button>
     </div>
   );
 
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
-      {/* --- HEADER & KEYBOARD NAV --- */}
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center' }}>
         <h2 style={{ color: 'white', marginBottom: '15px', fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
@@ -99,50 +99,30 @@ function App() {
       <div style={{ padding: '20px', maxWidth: '600px', margin: 'auto' }}>
         <p style={{textAlign:'center', fontSize:'10px', color:'#666', marginBottom:'10px'}}>{status}</p>
 
-        {/* DASHBOARD */}
+        {/* DASHBOARD WITH CLICKABLE CARDS */}
         {view === 'dashboard' && (
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px'}}>
             {CLASSES.map(c => (
-              <div key={c} style={cardStyle}><small style={{color:'#1a4a8e'}}>{c}</small><div style={{fontSize:'18px', fontWeight:'bold'}}>{classStats[c] || 0}</div></div>
-            ))}
-          </div>
-        )}
-
-        {/* ATTENDANCE MARKING */}
-        {view === 'attendance' && (
-          <div>
-            <h3 style={{textAlign:'center'}}>Marking: {filterClass}</h3>
-            {records.map(r => (
-              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span style={{fontWeight:'bold'}}>{r.student_name}</span>
-                <div style={{display:'flex', gap:'5px'}}>
-                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc', boxShadow: '0 3px 0 #1e7e34'}}>P</button>
-                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc', boxShadow: '0 3px 0 #bd2130'}}>A</button>
-                </div>
-              </div>
-            ))}
-            <button onClick={async () => { await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); }} style={actionBtn}>Submit Attendance</button>
-          </div>
-        )}
-
-        {/* HISTORY */}
-        {view === 'history' && (
-          <div>
-            <h3>Reports Archive</h3>
-            {history.map(h => (
-              <div key={h.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                  <div><b>{h.date}</b><br/><small>{h.class}</small></div>
-                  <button style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', boxShadow:'0 3px 0 #0d2a54'}}>PDF</button>
-                </div>
+              <div key={c} 
+                   onClick={() => fetchRecordsByClass('view', c)} 
+                   style={{...cardStyle, cursor:'pointer', borderLeft:'5px solid #f39c12', transition:'0.2s'}}
+                   onPointerDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+                   onPointerUp={(e) => e.currentTarget.style.transform = 'scale(1)'}>
+                <small style={{color:'#1a4a8e', fontWeight:'bold'}}>{c}</small>
+                <div style={{fontSize:'22px', fontWeight:'bold', marginTop:'5px'}}>{classStats[c] || 0}</div>
+                <div style={{fontSize:'10px', color:'#999', textAlign:'right'}}>View List →</div>
               </div>
             ))}
           </div>
         )}
 
-        {/* DIRECTORY LIST */}
+        {/* DIRECTORY VIEW */}
         {view === 'view' && !editingStudent && (
           <div>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
+               <h3 style={{margin:0}}>{filterClass}</h3>
+               <button onClick={() => fetchRecordsByClass('attendance', filterClass)} style={{padding:'5px 10px', fontSize:'11px', background:'#28a745', color:'white', border:'none', borderRadius:'5px'}}>Mark Attendance</button>
+            </div>
             <input placeholder="🔍 Search Students..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
               <div key={r.id} style={cardStyle}>
@@ -162,7 +142,39 @@ function App() {
           </div>
         )}
 
-        {/* ADMISSION & CLASS SELECTORS */}
+        {/* ATTENDANCE MARKING */}
+        {view === 'attendance' && (
+          <div>
+            <h3 style={{textAlign:'center'}}>Marking: {filterClass}</h3>
+            {records.map(r => (
+              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <span style={{fontWeight:'bold'}}>{r.student_name}</span>
+                <div style={{display:'flex', gap:'5px'}}>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc', boxShadow: '0 3px 0 #1e7e34'}}>P</button>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc', boxShadow: '0 3px 0 #bd2130'}}>A</button>
+                </div>
+              </div>
+            ))}
+            <button onClick={async () => { if(Object.keys(attendance).length === 0) return alert("Select P/A first"); await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); }} style={actionBtn}>Submit Attendance</button>
+          </div>
+        )}
+
+        {/* HISTORY */}
+        {view === 'history' && (
+          <div>
+            <h3>Reports Archive</h3>
+            {history.map(h => (
+              <div key={h.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <div><b>{h.date}</b><br/><small>{h.class}</small></div>
+                  <button style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', boxShadow:'0 3px 0 #0d2a54'}}>PDF</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ADMISSION FORM */}
         {view === 'add' && (
           <div style={cardStyle}>
             <h3>Admission</h3>
@@ -172,7 +184,7 @@ function App() {
             <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={async () => { await addDoc(collection(db, "ali_campus_records"), { student_name: name, roll_number: rollNo, parent_whatsapp: whatsapp, class: selectedClass, fee_status: 'Unpaid', created_at: serverTimestamp() }); setView('dashboard'); }} style={actionBtn}>Register Student</button>
+            <button onClick={async () => { await addDoc(collection(db, "ali_campus_records"), { student_name: name, roll_number: rollNo, parent_whatsapp: whatsapp, class: selectedClass, fee_status: 'Unpaid', created_at: serverTimestamp() }); setView('dashboard'); setName(''); setRollNo(''); setWhatsapp(''); }} style={actionBtn}>Register Student</button>
           </div>
         )}
 
