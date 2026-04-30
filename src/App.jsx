@@ -5,55 +5,58 @@ import { collection, addDoc } from "firebase/firestore";
 function App() {
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
+  const [status, setStatus] = useState('Ready');
 
   const saveStudent = async () => {
-    // Check agar fields khali hain
     if(name === '' || rollNo === '') {
-      alert("Please fill all fields");
+      alert("Fields khali hain!");
       return;
     }
 
     try {
-      console.log("Saving student...");
+      setStatus('Saving... Please wait');
+      console.log("Attempting to save...");
+      
       const docRef = await addDoc(collection(db, "students"), {
         studentName: name,
         rollNumber: rollNo,
-        timestamp: new Date()
+        time: new Date().toISOString()
       });
-      console.log("Document written with ID: ", docRef.id);
-      alert("Success! Student saved to Database.");
+
+      setStatus('Success! Data saved.');
+      alert("Mubarak ho! Data save ho gaya.");
       setName('');
       setRollNo('');
     } catch (error) {
-      console.error("Error adding document: ", error);
-      alert("Error: " + error.message);
+      console.error(error);
+      setStatus('Error: ' + error.message);
+      alert("Masla aa gaya: " + error.message);
     }
   }
 
   return (
     <div style={{ textAlign: 'center', padding: '20px', fontFamily: 'Arial' }}>
       <h2 style={{ color: '#1a4a8e' }}>Ali Campus Admin Panel</h2>
+      <p>System Status: <strong>{status}</strong></p>
       
       <div style={{ margin: '20px auto', maxWidth: '350px', padding: '30px', border: '2px solid #1a4a8e', borderRadius: '15px', backgroundColor: '#f0f4f8' }}>
-        <h3 style={{ marginBottom: '20px' }}>Add New Student</h3>
-        
         <input 
-          placeholder="Enter Student Name" 
+          placeholder="Student Name" 
           value={name} 
           onChange={(e) => setName(e.target.value)} 
-          style={{ width: '90%', marginBottom: '15px', padding: '12px', borderRadius: '8px', border: '1px solid #ccc' }} 
+          style={{ width: '90%', marginBottom: '15px', padding: '12px' }} 
         /><br/>
         
         <input 
-          placeholder="Enter Roll Number" 
+          placeholder="Roll Number" 
           value={rollNo} 
           onChange={(e) => setRollNo(e.target.value)} 
-          style={{ width: '90%', marginBottom: '20px', padding: '12px', borderRadius: '8px', border: '1px solid #ccc' }} 
+          style={{ width: '90%', marginBottom: '20px', padding: '12px' }} 
         /><br/>
         
         <button 
           onClick={saveStudent} 
-          style={{ width: '100%', padding: '15px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
+          style={{ width: '100%', padding: '15px', backgroundColor: '#1a4a8e', color: 'white', fontWeight: 'bold' }}
         >
           Save to Database
         </button>
