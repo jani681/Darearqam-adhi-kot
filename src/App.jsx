@@ -152,19 +152,32 @@ function App() {
           </div>
         )}
 
+        {/* --- SMART ATTENDANCE WITH COLOR FEEDBACK --- */}
         {view === 'attendance' && (
           <div>
             <h3 style={{textAlign:'center'}}>Marking: {filterClass}</h3>
             {records.map(r => (
-              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div key={r.id} style={{
+                  ...cardStyle, 
+                  display:'flex', 
+                  justifyContent:'space-between', 
+                  alignItems:'center',
+                  backgroundColor: attendance[r.student_name] === 'P' ? '#f0fff4' : attendance[r.student_name] === 'A' ? '#fff5f5' : 'white',
+                  borderRight: attendance[r.student_name] === 'P' ? '8px solid #28a745' : attendance[r.student_name] === 'A' ? '8px solid #dc3545' : 'none'
+              }}>
                 <span style={{fontWeight:'bold'}}>{r.student_name}</span>
-                <div style={{display:'flex', gap:'5px'}}>
+                <div style={{display:'flex', gap:'8px'}}>
                   <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc', boxShadow: '0 3px 0 #1e7e34'}}>P</button>
                   <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{...statusBtn, backgroundColor: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc', boxShadow: '0 3px 0 #bd2130'}}>A</button>
                 </div>
               </div>
             ))}
-            <button onClick={async () => { if(Object.keys(attendance).length === 0) return alert("Select P/A first"); await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); }} style={actionBtn}>Submit Attendance</button>
+            <button 
+                disabled={Object.keys(attendance).length === 0}
+                onClick={async () => { await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); }} 
+                style={{...actionBtn, opacity: Object.keys(attendance).length === 0 ? 0.5 : 1}}>
+              Finalize & Submit
+            </button>
           </div>
         )}
 
