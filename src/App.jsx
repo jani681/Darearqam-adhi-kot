@@ -19,7 +19,7 @@ function App() {
       setStatus('Data Loaded.');
       setView('view');
     } catch (err) {
-      alert("Error fetching: " + err.message);
+      console.error("Error fetching: ", err);
     }
   };
 
@@ -31,7 +31,7 @@ function App() {
   };
 
   const handleSave = async () => {
-    if(!name || !rollNo) return alert("Details bharen!");
+    if(!name || !rollNo) return;
     try {
       setStatus('Saving...');
       await addDoc(collection(db, "ali_campus_records"), {
@@ -40,11 +40,11 @@ function App() {
         photo_data: image,
         created_at: serverTimestamp()
       });
-      alert("Record Saved Successfully!");
+      setStatus('Profile Saved Successfully!');
       setName(''); setRollNo(''); setImage("");
-      setView('dashboard');
+      setTimeout(() => setView('dashboard'), 2000);
     } catch (err) { 
-      alert("Save Error: " + err.message); 
+      console.error("Save Error: ", err); 
     }
   };
 
@@ -67,7 +67,7 @@ function App() {
         {view === 'dashboard' && (
           <div style={{ textAlign: 'center', marginTop: '50px', color: '#1a4a8e' }}>
             <h3>Admin Dashboard</h3>
-            <p>Ali Campus Adhi Kot Portal is active and ready.</p>
+            <p>Ali Campus Adhi Kot Portal is active.</p>
           </div>
         )}
 
