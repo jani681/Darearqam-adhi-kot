@@ -9,14 +9,13 @@ const ADMIN_PASSWORD = "ali786";
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState(''); // 'admin' or 'staff'
+  const [userRole, setUserRole] = useState(''); 
   const [staffName, setStaffName] = useState(''); 
   const [passInput, setPassInput] = useState('');
   const [view, setView] = useState('dashboard');
   const [records, setRecords] = useState([]);
   const [searchTerm, setSearchTerm] = useState(''); 
   const [attendance, setAttendance] = useState({}); 
-  const [history, setHistory] = useState([]);
   const [filterClass, setFilterClass] = useState(CLASSES[0]);
   const [status, setStatus] = useState('Online');
   const [classStats, setClassStats] = useState({});
@@ -28,17 +27,6 @@ function App() {
   const [arrears, setArrears] = useState('');
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
   const [editingStudent, setEditingStudent] = useState(null);
-
-  const [staffRecords, setStaffRecords] = useState([]);
-  const [sName, setSName] = useState('');
-  const [sRole, setSRole] = useState('');
-  const [sSalary, setSSalary] = useState('');
-  const [sPass, setSPass] = useState('');
-
-  const [monthlyData, setMonthlyData] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-
-  const today = new Date().toISOString().split('T')[0];
 
   const handleLogin = async () => {
     if (passInput === ADMIN_PASSWORD) {
@@ -52,7 +40,7 @@ function App() {
       const snap = await getDocs(q);
       if (!snap.empty) {
         const staffData = snap.docs[0].data();
-        setStaffName(staffData.name);
+        setStaffName(staffData.name); 
         setUserRole('staff');
         setIsLoggedIn(true);
         setStatus('Staff Login Success');
@@ -107,7 +95,6 @@ function App() {
       <h3>Ali Campus Management</h3>
       <input type="password" placeholder="Enter Password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', border:'none', textAlign:'center'}} />
       <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', borderRadius:'8px', border:'none', background:'#f39c12', color:'white', fontWeight:'bold', fontSize:'16px'}}>LOGIN</button>
-      <p style={{fontSize:'10px', marginTop:'10px'}}>{status}</p>
     </div>
   );
 
@@ -130,8 +117,8 @@ function App() {
           <button onClick={() => { setIsLoggedIn(false); setPassInput(''); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
+
       <div style={{ padding: '15px', maxWidth: '600px', margin: 'auto' }}>
-        <p style={{textAlign:'center', fontSize:'10px', color:'#666'}}>{status}</p>
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
             {CLASSES.map(c => (
