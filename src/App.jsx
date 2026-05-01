@@ -41,65 +41,50 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // --- PDF FIX LOGIC ---
+  // --- PDF LOGIC ---
   const downloadPDF = (title, headers, bodyData, fileName) => {
     const doc = new jsPDF();
     doc.text("Ali Campus - Dar-e-Arqam", 14, 15);
     doc.text(title, 14, 22);
-    doc.autoTable({
-      head: [headers],
-      body: bodyData,
-      startY: 30,
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [26, 74, 142] }
-    });
+    doc.autoTable({ head: [headers], body: bodyData, startY: 30 });
     doc.save(`${fileName}.pdf`);
   };
 
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371e3; 
-    const dLat = (lat2-lat1) * Math.PI/180;
-    const dLon = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))); 
+  // --- DATA FETCHING (FIXED BLANK ISSUE) ---
+  const fetchData = async () => {
+    if (!isLoggedIn) return;
+    try {
+      // Fetch Dashboard Stats
+      const statsSnap = await getDocs(collection(db, "ali_campus_records"));
+      const stats = {};
+      statsSnap.docs.forEach(d => { const cls = d.data().class; stats[cls] = (stats[cls] || 0) + 1; });
+      setClassStats(stats);
+
+      // Fetch View-Specific Data
+      if (view === 'staff_list') {
+        const s = await getDocs(query(collection(db, "staff_records")));
+        setStaffRecords(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      } 
+      else if (view === 'history') {
+        const h = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp", "desc")));
+        setHistory(h.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
+      else if (view === 'view' || view === 'attendance') {
+        const q = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
+        const snap = await getDocs(q);
+        setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
+    } catch (e) { console.error("Error fetching data:", e); }
   };
 
-  const handleTeacherAttendance = () => {
-    if (!navigator.geolocation) return alert("Location not supported");
-    setStatus('Checking...');
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, SCHOOL_COORDS.lat, SCHOOL_COORDS.lng);
-      if (dist <= 500) {
-        await addDoc(collection(db, "teacher_attendance"), { name: staffName, date: today, time: new Date().toLocaleTimeString(), timestamp: serverTimestamp(), distance: Math.round(dist) + "m" });
-        alert("Attendance Marked!"); setStatus('Done');
-      } else { alert(`Too far! ${Math.round(dist)}m.`); setStatus('Out of Range'); }
-    }, () => alert("Enable Location Access!"));
-  };
+  useEffect(() => { fetchData(); }, [isLoggedIn, view, filterClass]);
 
   const handleLogin = async () => {
     if (passInput === ADMIN_PASSWORD) { setUserRole('admin'); setIsLoggedIn(true); return; }
-    try {
-      const q = query(collection(db, "staff_records"), where("password", "==", passInput));
-      const snap = await getDocs(q);
-      if (!snap.empty) { 
-        setStaffName(snap.docs[0].data().name); 
-        setUserRole('staff'); 
-        setIsLoggedIn(true); 
-      } else alert("Wrong Password!");
-    } catch (e) { alert("Login Error"); }
-  };
-
-  const fetchStats = async () => {
-    const snap = await getDocs(collection(db, "ali_campus_records"));
-    const stats = {};
-    snap.docs.forEach(d => { const cls = d.data().class; stats[cls] = (stats[cls] || 0) + 1; });
-    setClassStats(stats);
-  };
-
-  useEffect(() => { if (isLoggedIn) fetchStats(); }, [isLoggedIn, view]);
-
-  const clearInputs = () => {
-    setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears(''); setEditingStudent(null);
+    const q = query(collection(db, "staff_records"), where("password", "==", passInput));
+    const snap = await getDocs(q);
+    if (!snap.empty) { setStaffName(snap.docs[0].data().name); setUserRole('staff'); setIsLoggedIn(true); }
+    else alert("Wrong Password!");
   };
 
   const getNavStyle = (t) => ({
@@ -122,11 +107,11 @@ function App() {
         <h3 style={{margin:0}}>DAR-E-ARQAM (ALI CAMPUS)</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop:'15px', background:'#f0f2f5', padding:'10px', borderRadius:'15px' }}>
           <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
-          {userRole === 'admin' && <button onClick={() => { clearInputs(); setView('add'); }} style={getNavStyle('add')}>📝 Admit</button>}
+          {userRole === 'admin' && <button onClick={() => setView('add')} style={getNavStyle('add')}>📝 Admit</button>}
           {userRole === 'admin' && <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Dir</button>}
           <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Atten</button>
-          {userRole === 'admin' && <button onClick={async () => { const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d=>({id:d.id, ...d.data()}))); setView('staff_list'); }} style={getNavStyle('staff_list')}>👥 Staff</button>}
-          <button onClick={async () => { const h = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp","desc"))); setHistory(h.docs.map(d=>({id:d.id, ...d.data()}))); setView('history'); }} style={getNavStyle('history')}>📜 Hist</button>
+          {userRole === 'admin' && <button onClick={() => setView('staff_list')} style={getNavStyle('staff_list')}>👥 Staff</button>}
+          <button onClick={() => setView('history')} style={getNavStyle('history')}>📜 Hist</button>
           {userRole === 'admin' && <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>}
           <button onClick={() => setIsLoggedIn(false)} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
@@ -134,41 +119,40 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
         
-        {view === 'history' && (
+        {/* DIRECTORY VIEW */}
+        {view === 'view' && (
           <div>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <h3>Attendance Logs</h3>
-              <button onClick={() => downloadPDF("Attendance Logs", ["Date", "Class"], history.map(h => [h.date, h.class]), "Attendance_History")} style={{padding:'8px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'5px'}}>Export PDF</button>
+            <input placeholder="Search Student..." onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
+            {records.length === 0 ? <p>No records found.</p> : records.filter(r=>r.student_name.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
+              <div key={r.id} style={cardStyle}>
+                <b>{r.student_name}</b> ({r.roll_number})
+                <div style={{marginTop:'5px'}}><button onClick={()=>{setEditingStudent(r); setName(r.student_name); setView('add');}} style={{background:'#f39c12', border:'none', color:'white', padding:'5px', borderRadius:'5px'}}>Edit</button></div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* STAFF LIST VIEW */}
+        {view === 'staff_list' && (
+          <div>
+            <div style={cardStyle}>
+              <h4>Add Staff</h4>
+              <input placeholder="Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle} />
+              <input placeholder="Pass" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle} />
+              <button onClick={async ()=>{
+                await addDoc(collection(db,"staff_records"),{name:sName, password:sPass});
+                alert("Added"); setSName(''); setSPass(''); fetchData();
+              }} style={actionBtn}>Save Staff</button>
             </div>
-            {history.map(h => <div key={h.id} style={cardStyle}><b>{h.date}</b> - {h.class}</div>)}
+            {staffRecords.map(s => <div key={s.id} style={cardStyle}><b>{s.name}</b> (Pass: {s.password})</div>)}
           </div>
         )}
 
-        {view === 'monthly_report' && (
-          <div style={cardStyle}>
-             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
-               <h4 style={{margin:0}}>{filterClass} ({selectedMonth})</h4>
-               <button onClick={() => downloadPDF(`${filterClass} Report`, ["Student", "Present", "Absent"], monthlyData.map(([n,s]) => [n, s.p, s.a]), "Monthly_Report")} style={{padding:'5px 10px', background:'#28a745', color:'white', border:'none', borderRadius:'5px'}}>PDF</button>
-             </div>
-             <table style={{width:'100%', borderCollapse:'collapse'}}>
-               <thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Name</th><th>P</th><th>A</th></tr></thead>
-               <tbody>{monthlyData.map(([n,s])=>(<tr key={n} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'5px'}}>{n}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody>
-             </table>
-          </div>
-        )}
-
-        {/* Dashboard & Selection Screens (Keeping same as provided) */}
+        {/* DASHBOARD STATS */}
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
-            {userRole === 'staff' && <button onClick={handleTeacherAttendance} style={{ gridColumn:'span 2', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'12px', fontWeight:'bold', marginBottom:'10px' }}>📍 Mark My Attendance ({status})</button>}
             {CLASSES.map(c => (
-              <div key={c} onClick={async () => {
-                setFilterClass(c);
-                const q = query(collection(db, "ali_campus_records"), where("class", "==", c));
-                const snap = await getDocs(q);
-                setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                setView(userRole === 'admin' ? 'view' : 'attendance');
-              }} style={cardStyle}>
+              <div key={c} onClick={() => { setFilterClass(c); setView('sel_att'); }} style={cardStyle}>
                 <small>{c}</small>
                 <div style={{fontSize:'22px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
               </div>
@@ -176,53 +160,34 @@ function App() {
           </div>
         )}
 
-        {/* Admission Form */}
-        {view === 'add' && (
-          <div style={cardStyle}>
-            <h3>{editingStudent ? "Edit" : "Admit"}</h3>
-            <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
-            <input placeholder="Roll" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
-            <input placeholder="WhatsApp" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
-            <input placeholder="Fee" value={baseFee} onChange={(e)=>setBaseFee(e.target.value)} style={inputStyle} />
-            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
-              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={async () => {
-              const d = { student_name:name, roll_number:rollNo, parent_whatsapp:whatsapp, class:selectedClass, base_fee:Number(baseFee), arrears:Number(arrears) };
-              editingStudent ? await updateDoc(doc(db,"ali_campus_records",editingStudent.id), d) : await addDoc(collection(db,"ali_campus_records"), {...d, created_at:serverTimestamp()});
-              alert("Saved!"); setView('dashboard'); clearInputs();
-            }} style={actionBtn}>Save</button>
+        {/* ATTENDANCE MARKING */}
+        {view === 'attendance' && (
+          <div>
+            <h3>{filterClass} - {today}</h3>
+            {records.map(r => (
+              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between'}}>
+                <span>{r.student_name}</span>
+                <div>
+                  <button onClick={()=>setAttendance({...attendance, [r.student_name]:'P'})} style={{background:attendance[r.student_name]==='P'?'#2ecc71':'#ccc', color:'white', border:'none', padding:'8px', borderRadius:'5px', marginRight:'5px'}}>P</button>
+                  <button onClick={()=>setAttendance({...attendance, [r.student_name]:'A'})} style={{background:attendance[r.student_name]==='A'?'#e74c3c':'#ccc', color:'white', border:'none', padding:'8px', borderRadius:'5px'}}>A</button>
+                </div>
+              </div>
+            ))}
+            <button onClick={async ()=>{
+              await addDoc(collection(db,"daily_attendance"), {class:filterClass, date:today, attendance_data:attendance, timestamp:serverTimestamp()});
+              alert("Saved!"); setView('dashboard');
+            }} style={actionBtn}>Submit Attendance</button>
           </div>
         )}
 
+        {/* SELECTION SCREENS */}
         {(view==='sel_view'||view==='sel_att'||view==='sel_report') && (
           <div style={cardStyle}>
             <h3>Select Class</h3>
-            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
-            {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
-            <button onClick={async ()=> {
-              if(view==='sel_report') {
-                const q = query(collection(db, "daily_attendance"), where("class", "==", filterClass));
-                const snap = await getDocs(q);
-                const summary = {};
-                snap.docs.forEach(d => {
-                  const data = d.data();
-                  if (data.date?.startsWith(selectedMonth)) {
-                    Object.entries(data.attendance_data).forEach(([std, stat]) => {
-                      if (!summary[std]) summary[std] = { p: 0, a: 0 };
-                      stat === 'P' ? summary[std].p++ : summary[std].a++;
-                    });
-                  }
-                });
-                setMonthlyData(Object.entries(summary));
-                setView('monthly_report');
-              } else {
-                const q = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
-                const snap = await getDocs(q);
-                setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                setView(view==='sel_view'?'view':'attendance');
-              }
-            }} style={actionBtn}>Open</button>
+            <select value={filterClass} onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={()=>setView(view==='sel_view'?'view':'attendance')} style={actionBtn}>Open</button>
           </div>
         )}
 
