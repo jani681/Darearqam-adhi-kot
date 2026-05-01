@@ -10,7 +10,7 @@ const ADMIN_PASSWORD = "ali786";
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState(''); // 'admin' or 'staff'
-  const [staffName, setStaffName] = useState(''); // Teacher name
+  const [staffName, setStaffName] = useState(''); 
   const [passInput, setPassInput] = useState('');
   const [view, setView] = useState('dashboard');
   const [records, setRecords] = useState([]);
@@ -21,7 +21,6 @@ function App() {
   const [status, setStatus] = useState('Online');
   const [classStats, setClassStats] = useState({});
   
-  // Student States
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -30,12 +29,14 @@ function App() {
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
   const [editingStudent, setEditingStudent] = useState(null);
 
-  // Staff States
   const [staffRecords, setStaffRecords] = useState([]);
   const [sName, setSName] = useState('');
   const [sRole, setSRole] = useState('');
   const [sSalary, setSSalary] = useState('');
   const [sPass, setSPass] = useState('');
+
+  const [monthlyData, setMonthlyData] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -106,13 +107,17 @@ function App() {
       <h3>Ali Campus Management</h3>
       <input type="password" placeholder="Enter Password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', border:'none', textAlign:'center'}} />
       <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', borderRadius:'8px', border:'none', background:'#f39c12', color:'white', fontWeight:'bold', fontSize:'16px'}}>LOGIN</button>
+      <p style={{fontSize:'10px', marginTop:'10px'}}>{status}</p>
     </div>
   );
 
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center' }}>
-        <h2 style={{ color: 'white', margin: '0 0 10px 0', fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
+          <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', padding: '2px' }} />
+          <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
+        </div>
         {userRole === 'staff' && (
           <div style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '5px', borderRadius: '8px', marginBottom: '10px', fontSize: '14px', fontWeight: 'bold' }}>
             Teacher: {staffName}
@@ -120,28 +125,26 @@ function App() {
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
           <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
+          {userRole === 'admin' && <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Dir</button>}
           <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Atten</button>
           <button onClick={() => { setIsLoggedIn(false); setPassInput(''); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
-
       <div style={{ padding: '15px', maxWidth: '600px', margin: 'auto' }}>
+        <p style={{textAlign:'center', fontSize:'10px', color:'#666'}}>{status}</p>
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
             {CLASSES.map(c => (
-              <div key={c} onClick={() => fetchRecordsByClass(userRole === 'admin' ? 'view' : 'attendance', c)} style={{ background: 'white', padding: '12px', borderRadius: '12px', borderLeft:'5px solid #f39c12', cursor: 'pointer'}}>
+              <div key={c} onClick={() => fetchRecordsByClass(userRole === 'admin' ? 'view' : 'attendance', c)} style={{ background: 'white', padding: '12px', borderRadius: '12px', borderLeft:'5px solid #f39c12', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.08)'}}>
                 <small style={{color:'#1a4a8e', fontWeight:'bold'}}>{c}</small>
                 <div style={{fontSize:'20px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
               </div>
             ))}
           </div>
         )}
-        {/* Attendance & Class Views Logic */}
       </div>
     </div>
   );
 }
-
-const cardStyle = { background: 'white', padding: '12px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '10px' };
 
 export default App;
