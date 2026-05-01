@@ -10,6 +10,7 @@ const ADMIN_PASSWORD = "ali786";
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState(''); // 'admin' or 'staff'
+  const [staffName, setStaffName] = useState(''); // Teacher name save karne ke liye
   const [passInput, setPassInput] = useState('');
   const [view, setView] = useState('dashboard');
   const [records, setRecords] = useState([]);
@@ -41,7 +42,7 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // --- NEW LOGIN LOGIC ---
+  // --- UPDATED LOGIN LOGIC ---
   const handleLogin = async () => {
     if (passInput === ADMIN_PASSWORD) {
       setUserRole('admin');
@@ -54,6 +55,8 @@ function App() {
       const q = query(collection(db, "staff_records"), where("password", "==", passInput));
       const snap = await getDocs(q);
       if (!snap.empty) {
+        const staffData = snap.docs[0].data();
+        setStaffName(staffData.name); // Staff ka naam save kiya
         setUserRole('staff');
         setIsLoggedIn(true);
         setStatus('Staff Login Success');
@@ -229,11 +232,17 @@ function App() {
           <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', padding: '2px' }} />
           <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         </div>
+
+        {/* STAFF PANEL LABEL: Displaying Teacher Name */}
+        {userRole === 'staff' && (
+          <div style={{ background: 'rgba(255,255,255,0.2)', color: 'white', padding: '5px', borderRadius: '8px', marginBottom: '10px', fontSize: '14px', fontWeight: 'bold' }}>
+            Teacher: {staffName}
+          </div>
+        )}
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
           <button onClick={() => { setView('dashboard'); setEditingStudent(null); }} style={getNavStyle('dashboard')}>🏠 Home</button>
           
-          {/* Admin Only Buttons */}
           {userRole === 'admin' && (
             <>
               <button onClick={() => { setView('add'); setEditingStudent(null); }} style={getNavStyle('add')}>📝 Admit</button>
@@ -243,14 +252,12 @@ function App() {
 
           <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Atten</button>
 
-          {/* Admin Only Buttons */}
           {userRole === 'admin' && (
             <button onClick={fetchStaff} style={getNavStyle('staff_list')}>👥 Staff</button>
           )}
 
           <button onClick={fetchHistory} style={getNavStyle('history')}>📜 Hist</button>
 
-          {/* Admin Only Buttons */}
           {userRole === 'admin' && (
             <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>
           )}
@@ -265,7 +272,7 @@ function App() {
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
             {CLASSES.map(c => (
-              <div key={c} onClick={() => fetchRecordsByClass('view', c)} style={{...cardStyle, borderLeft:'5px solid #f39c12', cursor: userRole === 'admin' ? 'pointer' : 'default'}}>
+              <div key={c} onClick={() => fetchRecordsByClass(userRole === 'admin' ? 'view' : 'attendance', c)} style={{...cardStyle, borderLeft:'5px solid #f39c12', cursor: 'pointer'}}>
                 <small style={{color:'#1a4a8e', fontWeight:'bold'}}>{c}</small>
                 <div style={{fontSize:'20px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
               </div>
@@ -273,7 +280,6 @@ function App() {
           </div>
         )}
 
-        {/* STAFF SECTION (Admin Only) */}
         {view === 'staff_list' && userRole === 'admin' && (
           <div>
             <div style={cardStyle}>
@@ -295,7 +301,6 @@ function App() {
           </div>
         )}
 
-        {/* DIRECTORY SECTION (Admin Only) */}
         {view === 'view' && userRole === 'admin' && (
           <div>
             <input placeholder="🔍 Search..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
@@ -306,6 +311,7 @@ function App() {
                   <div style={{display:'flex', gap:'5px'}}>
                     <a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{padding:'5px', background:'#25D366', borderRadius:'5px', color:'white', textDecoration:'none', fontSize:'12px'}}>WA</a>
                     <button onClick={() => handleEdit(r)} style={{background:'#f39c12', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>Edit</button>
+                    <button onClick={() => handleDelete(r.id)} style={{background:'#dc3545', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>Del</button>
                   </div>
                 </div>
               </div>
@@ -313,7 +319,6 @@ function App() {
           </div>
         )}
 
-        {/* ADMISSION FORM (Admin Only) */}
         {view === 'add' && userRole === 'admin' && (
           <div style={cardStyle}>
             <h3>{editingStudent ? "Update Student" : "New Admission"}</h3>
@@ -341,7 +346,6 @@ function App() {
           </div>
         )}
 
-        {/* ATTENDANCE SECTION (Shared) */}
         {view === 'attendance' && (
           <div>
             <h3>Attendance: {filterClass}</h3>
@@ -358,7 +362,6 @@ function App() {
           </div>
         )}
 
-        {/* HISTORY SECTION (Shared) */}
         {view === 'history' && (
           <div>
             {history.map(h => (
@@ -372,7 +375,6 @@ function App() {
           </div>
         )}
 
-        {/* REPORT & SELECTION (Admin Only) */}
         {view === 'monthly_report' && userRole === 'admin' && (
           <div>
             <h3 style={{textAlign:'center'}}>{filterClass} - {selectedMonth}</h3>
@@ -391,6 +393,7 @@ function App() {
                 </tbody>
               </table>
             </div>
+            <button onClick={()=>setView('dashboard')} style={actionBtn}>Back to Home</button>
           </div>
         )}
 
