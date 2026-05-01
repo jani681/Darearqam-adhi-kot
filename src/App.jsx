@@ -22,6 +22,8 @@ function App() {
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
+  const [baseFee, setBaseFee] = useState(''); // New State
+  const [arrears, setArrears] = useState(''); // New State
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
   const [editingStudent, setEditingStudent] = useState(null);
 
@@ -193,14 +195,16 @@ function App() {
           </div>
         )}
 
-        {/* ... baaki views (view, attendance, history, add) bilkul code V5 ki tarah yahan paste honge ... */}
         {view === 'view' && !editingStudent && (
           <div>
             <input placeholder="🔍 Search..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
               <div key={r.id} style={{...cardStyle, borderLeft: r.fee_status === 'Paid' ? '5px solid #28a745' : '5px solid #dc3545'}}>
                 <div style={{display:'flex', justifyContent:'space-between'}}>
-                  <div><b>{r.student_name}</b> <br/> <small>Roll: {r.roll_number}</small></div>
+                  <div>
+                    <b>{r.student_name}</b> <br/> 
+                    <small>Roll: {r.roll_number} | Total Dues: RS {r.total_dues || 0}</small>
+                  </div>
                   <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", r.id), { fee_status: r.fee_status === 'Paid' ? 'Unpaid' : 'Paid' }); fetchRecordsByClass('view', filterClass); }} style={{background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>{r.fee_status || 'Unpaid'}</button>
                 </div>
               </div>
@@ -242,10 +246,32 @@ function App() {
             <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
             <input placeholder="Roll" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
             <input placeholder="WhatsApp" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
+            
+            {/* New Fee Fields */}
+            <div style={{display:'flex', gap:'10px'}}>
+              <input type="number" placeholder="Monthly Fee" value={baseFee} onChange={(e)=>setBaseFee(e.target.value)} style={inputStyle} />
+              <input type="number" placeholder="Arrears" value={arrears} onChange={(e)=>setArrears(e.target.value)} style={inputStyle} />
+            </div>
+
             <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={async () => { await addDoc(collection(db, "ali_campus_records"), { student_name: name, roll_number: rollNo, parent_whatsapp: whatsapp, class: selectedClass, fee_status: 'Unpaid', created_at: serverTimestamp() }); setView('dashboard'); setName(''); setRollNo(''); setWhatsapp(''); }} style={actionBtn}>Register</button>
+            
+            <button onClick={async () => { 
+              const total = (Number(baseFee) || 0) + (Number(arrears) || 0);
+              await addDoc(collection(db, "ali_campus_records"), { 
+                student_name: name, 
+                roll_number: rollNo, 
+                parent_whatsapp: whatsapp, 
+                class: selectedClass, 
+                base_fee: Number(baseFee) || 0,
+                arrears: Number(arrears) || 0,
+                total_dues: total,
+                fee_status: 'Unpaid', 
+                created_at: serverTimestamp() 
+              }); 
+              setView('dashboard'); setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears('');
+            }} style={actionBtn}>Register Student</button>
           </div>
         )}
 
@@ -265,6 +291,5 @@ function App() {
 const cardStyle = { background: 'white', padding: '12px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '10px' };
 const inputStyle = { width: '100%', padding: '10px', margin: '5px 0', borderRadius: '8px', border: '1px solid #ddd' };
 const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' };
-const statusBtn = { padding: '8px 15px', border: 'none', borderRadius: '5px', color: 'white' }; // unused but kept for structure
 
 export default App;
