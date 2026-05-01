@@ -22,8 +22,8 @@ function App() {
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
-  const [baseFee, setBaseFee] = useState(''); // New State
-  const [arrears, setArrears] = useState(''); // New State
+  const [baseFee, setBaseFee] = useState('');
+  const [arrears, setArrears] = useState('');
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
   const [editingStudent, setEditingStudent] = useState(null);
 
@@ -109,6 +109,24 @@ function App() {
     } catch (e) { setStatus('Error'); }
   };
 
+  const handleEdit = (r) => {
+    setEditingStudent(r);
+    setName(r.student_name);
+    setRollNo(r.roll_number);
+    setWhatsapp(r.parent_whatsapp);
+    setBaseFee(r.base_fee || 0);
+    setArrears(r.arrears || 0);
+    setSelectedClass(r.class);
+    setView('add');
+  };
+
+  const handleDelete = async (id) => {
+    if(window.confirm("Are you sure you want to delete this student?")) {
+      await deleteDoc(doc(db, "ali_campus_records", id));
+      fetchRecordsByClass('view', filterClass);
+    }
+  };
+
   const getNavStyle = (targetView) => ({
     padding: '12px 5px',
     borderRadius: '10px',
@@ -137,8 +155,8 @@ function App() {
           <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
-          <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
-          <button onClick={() => setView('add')} style={getNavStyle('add')}>📝 Admission</button>
+          <button onClick={() => { setView('dashboard'); setEditingStudent(null); }} style={getNavStyle('dashboard')}>🏠 Home</button>
+          <button onClick={() => { setView('add'); setEditingStudent(null); }} style={getNavStyle('add')}>📝 Admission</button>
           <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Directory</button>
           <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Attend</button>
           <button onClick={fetchHistory} style={getNavStyle('history')}>📜 History</button>
@@ -160,58 +178,59 @@ function App() {
           </div>
         )}
 
-        {view === 'sel_report' && (
-          <div style={cardStyle}>
-            <h3>Monthly Report</h3>
-            <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />
-            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
-              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={() => generateMonthlySummary(filterClass)} style={actionBtn}>Generate Summary</button>
-          </div>
-        )}
-
-        {view === 'monthly_report' && (
-          <div>
-            <h3 style={{textAlign:'center'}}>{filterClass} - {selectedMonth}</h3>
-            <div style={{background:'white', borderRadius:'12px', padding:'10px', overflowX:'auto'}}>
-              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'12px'}}>
-                <thead>
-                  <tr style={{borderBottom:'2px solid #eee'}}><th style={{textAlign:'left'}}>Name</th><th>P</th><th style={{color:'red'}}>A</th><th>%</th></tr>
-                </thead>
-                <tbody>
-                  {monthlyData.map(([stdName, stats]) => (
-                    <tr key={stdName} style={{borderBottom:'1px solid #eee'}}>
-                      <td style={{padding:'8px'}}><b>{stdName}</b></td>
-                      <td style={{textAlign:'center'}}>{stats.p}</td>
-                      <td style={{textAlign:'center', color:'red'}}>{stats.a}</td>
-                      <td style={{textAlign:'center', fontWeight:'bold'}}>{((stats.p / (stats.p+stats.a))*100).toFixed(0)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#666'}}>Back</button>
-          </div>
-        )}
-
-        {view === 'view' && !editingStudent && (
+        {view === 'view' && (
           <div>
             <input placeholder="🔍 Search..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
               <div key={r.id} style={{...cardStyle, borderLeft: r.fee_status === 'Paid' ? '5px solid #28a745' : '5px solid #dc3545'}}>
-                <div style={{display:'flex', justifyContent:'space-between'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                   <div>
                     <b>{r.student_name}</b> <br/> 
-                    <small>Roll: {r.roll_number} | Total Dues: RS {r.total_dues || 0}</small>
+                    <small>Roll: {r.roll_number} | Dues: RS {r.total_dues || 0}</small>
                   </div>
-                  <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", r.id), { fee_status: r.fee_status === 'Paid' ? 'Unpaid' : 'Paid' }); fetchRecordsByClass('view', filterClass); }} style={{background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>{r.fee_status || 'Unpaid'}</button>
+                  <div style={{display:'flex', gap:'5px'}}>
+                    <a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{padding:'5px', background:'#25D366', borderRadius:'5px', color:'white', textDecoration:'none', fontSize:'12px'}}>WA</a>
+                    <button onClick={() => handleEdit(r)} style={{background:'#f39c12', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>Edit</button>
+                    <button onClick={() => handleDelete(r.id)} style={{background:'#666', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>Del</button>
+                    <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", r.id), { fee_status: r.fee_status === 'Paid' ? 'Unpaid' : 'Paid' }); fetchRecordsByClass('view', filterClass); }} style={{background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>{r.fee_status || 'Unpaid'}</button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
 
+        {view === 'add' && (
+          <div style={cardStyle}>
+            <h3>{editingStudent ? "Update Student" : "New Admission"}</h3>
+            <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <input placeholder="WhatsApp" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
+            <div style={{display:'flex', gap:'10px'}}>
+              <input type="number" placeholder="Monthly Fee" value={baseFee} onChange={(e)=>setBaseFee(e.target.value)} style={inputStyle} />
+              <input type="number" placeholder="Arrears" value={arrears} onChange={(e)=>setArrears(e.target.value)} style={inputStyle} />
+            </div>
+            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={async () => { 
+              const total = (Number(baseFee) || 0) + (Number(arrears) || 0);
+              const data = { 
+                student_name: name, roll_number: rollNo, parent_whatsapp: whatsapp, 
+                class: selectedClass, base_fee: Number(baseFee) || 0, arrears: Number(arrears) || 0,
+                total_dues: total, fee_status: editingStudent ? editingStudent.fee_status : 'Unpaid'
+              };
+              if(editingStudent) {
+                await updateDoc(doc(db, "ali_campus_records", editingStudent.id), data);
+              } else {
+                await addDoc(collection(db, "ali_campus_records"), { ...data, created_at: serverTimestamp() });
+              }
+              setView('dashboard'); setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears(''); setEditingStudent(null);
+            }} style={actionBtn}>{editingStudent ? "Update" : "Register"}</button>
+          </div>
+        )}
+
+        {/* Attendance, History, Reports same as before */}
         {view === 'attendance' && (
           <div>
             {records.map(r => (
@@ -240,38 +259,36 @@ function App() {
           </div>
         )}
 
-        {view === 'add' && (
+        {view === 'sel_report' && (
           <div style={cardStyle}>
-            <h3>New Admission</h3>
-            <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
-            <input placeholder="Roll" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
-            <input placeholder="WhatsApp" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
-            
-            {/* New Fee Fields */}
-            <div style={{display:'flex', gap:'10px'}}>
-              <input type="number" placeholder="Monthly Fee" value={baseFee} onChange={(e)=>setBaseFee(e.target.value)} style={inputStyle} />
-              <input type="number" placeholder="Arrears" value={arrears} onChange={(e)=>setArrears(e.target.value)} style={inputStyle} />
-            </div>
-
-            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
+            <h3>Monthly Report</h3>
+            <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />
+            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            
-            <button onClick={async () => { 
-              const total = (Number(baseFee) || 0) + (Number(arrears) || 0);
-              await addDoc(collection(db, "ali_campus_records"), { 
-                student_name: name, 
-                roll_number: rollNo, 
-                parent_whatsapp: whatsapp, 
-                class: selectedClass, 
-                base_fee: Number(baseFee) || 0,
-                arrears: Number(arrears) || 0,
-                total_dues: total,
-                fee_status: 'Unpaid', 
-                created_at: serverTimestamp() 
-              }); 
-              setView('dashboard'); setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears('');
-            }} style={actionBtn}>Register Student</button>
+            <button onClick={() => generateMonthlySummary(filterClass)} style={actionBtn}>Generate Summary</button>
+          </div>
+        )}
+
+        {view === 'monthly_report' && (
+          <div>
+            <h3 style={{textAlign:'center'}}>{filterClass} - {selectedMonth}</h3>
+            <div style={{background:'white', borderRadius:'12px', padding:'10px', overflowX:'auto'}}>
+              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'12px'}}>
+                <thead><tr style={{borderBottom:'2px solid #eee'}}><th style={{textAlign:'left'}}>Name</th><th>P</th><th>A</th><th>%</th></tr></thead>
+                <tbody>
+                  {monthlyData.map(([stdName, stats]) => (
+                    <tr key={stdName} style={{borderBottom:'1px solid #eee'}}>
+                      <td style={{padding:'8px'}}><b>{stdName}</b></td>
+                      <td style={{textAlign:'center'}}>{stats.p}</td>
+                      <td style={{textAlign:'center', color:'red'}}>{stats.a}</td>
+                      <td style={{textAlign:'center', fontWeight:'bold'}}>{((stats.p / (stats.p+stats.a))*100).toFixed(0)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#666', marginTop:'10px'}}>Back</button>
           </div>
         )}
 
@@ -290,6 +307,6 @@ function App() {
 
 const cardStyle = { background: 'white', padding: '12px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '10px' };
 const inputStyle = { width: '100%', padding: '10px', margin: '5px 0', borderRadius: '8px', border: '1px solid #ddd' };
-const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' };
+const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginTop: '10px' };
 
 export default App;
