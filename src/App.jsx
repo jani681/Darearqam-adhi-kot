@@ -9,6 +9,7 @@ const ADMIN_PASSWORD = "ali786";
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState(''); // 'admin' or 'staff'
   const [passInput, setPassInput] = useState('');
   const [view, setView] = useState('dashboard');
   const [records, setRecords] = useState([]);
@@ -39,6 +40,32 @@ function App() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const today = new Date().toISOString().split('T')[0];
+
+  // --- NEW LOGIN LOGIC ---
+  const handleLogin = async () => {
+    if (passInput === ADMIN_PASSWORD) {
+      setUserRole('admin');
+      setIsLoggedIn(true);
+      return;
+    }
+
+    setStatus('Verifying Staff...');
+    try {
+      const q = query(collection(db, "staff_records"), where("password", "==", passInput));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        setUserRole('staff');
+        setIsLoggedIn(true);
+        setStatus('Staff Login Success');
+      } else {
+        alert("Invalid Password!");
+        setStatus('Ready');
+      }
+    } catch (e) {
+      alert("Login Error");
+      setStatus('Error');
+    }
+  };
 
   // --- STAFF FUNCTIONS ---
   const fetchStaff = async () => {
@@ -176,7 +203,7 @@ function App() {
     borderRadius: '10px',
     border: 'none',
     fontWeight: 'bold',
-    fontSize: '9px', // Reduced slightly for 4 columns
+    fontSize: '9px',
     cursor: 'pointer',
     backgroundColor: view === targetView ? '#f39c12' : '#ffffff',
     color: '#1a4a8e',
@@ -185,9 +212,13 @@ function App() {
 
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
-      <h3>Ali Campus Login</h3>
-      <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'10px', borderRadius:'5px'}} />
-      <button onClick={() => passInput === ADMIN_PASSWORD ? setIsLoggedIn(true) : alert("Wrong Password")} style={{marginTop:'10px', padding:'10px 20px', borderRadius:'5px', border:'none', background:'white', color:'#1a4a8e', fontWeight:'bold'}}>Login</button>
+      <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', backgroundColor: 'white', padding: '5px' }} />
+          <h3>Ali Campus Management</h3>
+      </div>
+      <input type="password" placeholder="Enter Password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', border:'none', textAlign:'center'}} />
+      <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', borderRadius:'8px', border:'none', background:'#f39c12', color:'white', fontWeight:'bold', fontSize:'16px'}}>LOGIN</button>
+      <p style={{fontSize:'10px', marginTop:'10px'}}>{status}</p>
     </div>
   );
 
@@ -198,16 +229,33 @@ function App() {
           <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', padding: '2px' }} />
           <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         </div>
-        {/* Updated Grid to 4 Columns to fit all buttons */}
+        
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
           <button onClick={() => { setView('dashboard'); setEditingStudent(null); }} style={getNavStyle('dashboard')}>🏠 Home</button>
-          <button onClick={() => { setView('add'); setEditingStudent(null); }} style={getNavStyle('add')}>📝 Admit</button>
-          <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Dir</button>
+          
+          {/* Admin Only Buttons */}
+          {userRole === 'admin' && (
+            <>
+              <button onClick={() => { setView('add'); setEditingStudent(null); }} style={getNavStyle('add')}>📝 Admit</button>
+              <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Dir</button>
+            </>
+          )}
+
           <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Atten</button>
-          <button onClick={fetchStaff} style={getNavStyle('staff_list')}>👥 Staff</button>
+
+          {/* Admin Only Buttons */}
+          {userRole === 'admin' && (
+            <button onClick={fetchStaff} style={getNavStyle('staff_list')}>👥 Staff</button>
+          )}
+
           <button onClick={fetchHistory} style={getNavStyle('history')}>📜 Hist</button>
-          <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>
-          <button onClick={() => setIsLoggedIn(false)} style={getNavStyle('logout')}>🚪 Out</button>
+
+          {/* Admin Only Buttons */}
+          {userRole === 'admin' && (
+            <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>
+          )}
+
+          <button onClick={() => { setIsLoggedIn(false); setPassInput(''); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
 
@@ -217,7 +265,7 @@ function App() {
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
             {CLASSES.map(c => (
-              <div key={c} onClick={() => fetchRecordsByClass('view', c)} style={{...cardStyle, borderLeft:'5px solid #f39c12', cursor:'pointer'}}>
+              <div key={c} onClick={() => fetchRecordsByClass('view', c)} style={{...cardStyle, borderLeft:'5px solid #f39c12', cursor: userRole === 'admin' ? 'pointer' : 'default'}}>
                 <small style={{color:'#1a4a8e', fontWeight:'bold'}}>{c}</small>
                 <div style={{fontSize:'20px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
               </div>
@@ -225,25 +273,21 @@ function App() {
           </div>
         )}
 
-        {/* STAFF SECTION */}
-        {view === 'staff_list' && (
+        {/* STAFF SECTION (Admin Only) */}
+        {view === 'staff_list' && userRole === 'admin' && (
           <div>
             <div style={cardStyle}>
               <h3>Add New Staff</h3>
               <input placeholder="Staff Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle} />
-              <input placeholder="Role (e.g. Science Teacher)" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle} />
-              <input type="number" placeholder="Monthly Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle} />
-              <input placeholder="Set Login Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle} />
+              <input placeholder="Role" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle} />
+              <input type="number" placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle} />
+              <input placeholder="Login Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle} />
               <button onClick={handleAddStaff} style={actionBtn}>Register Staff</button>
             </div>
-            <h3>Current Staff</h3>
             {staffRecords.map(s => (
               <div key={s.id} style={{...cardStyle, borderLeft:'5px solid #1a4a8e'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                  <div>
-                    <b>{s.name}</b> <br/>
-                    <small>{s.role} | Salary: {s.salary}</small>
-                  </div>
+                  <div><b>{s.name}</b> <br/><small>{s.role} | PWD: {s.password}</small></div>
                   <button onClick={() => deleteStaff(s.id)} style={{background:'#dc3545', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>Del</button>
                 </div>
               </div>
@@ -251,22 +295,17 @@ function App() {
           </div>
         )}
 
-        {/* STUDENT DIRECTORY */}
-        {view === 'view' && (
+        {/* DIRECTORY SECTION (Admin Only) */}
+        {view === 'view' && userRole === 'admin' && (
           <div>
             <input placeholder="🔍 Search..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
               <div key={r.id} style={{...cardStyle, borderLeft: r.fee_status === 'Paid' ? '5px solid #28a745' : '5px solid #dc3545'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                  <div>
-                    <b>{r.student_name}</b> <br/> 
-                    <small>Roll: {r.roll_number} | Dues: RS {r.total_dues || 0}</small>
-                  </div>
+                  <div><b>{r.student_name}</b> <br/><small>Roll: {r.roll_number} | Dues: RS {r.total_dues || 0}</small></div>
                   <div style={{display:'flex', gap:'5px'}}>
                     <a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{padding:'5px', background:'#25D366', borderRadius:'5px', color:'white', textDecoration:'none', fontSize:'12px'}}>WA</a>
                     <button onClick={() => handleEdit(r)} style={{background:'#f39c12', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>Edit</button>
-                    <button onClick={() => handleDelete(r.id)} style={{background:'#666', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>Del</button>
-                    <button onClick={async () => { await updateDoc(doc(db, "ali_campus_records", r.id), { fee_status: r.fee_status === 'Paid' ? 'Unpaid' : 'Paid' }); fetchRecordsByClass('view', filterClass); }} style={{background: r.fee_status === 'Paid' ? '#28a745' : '#dc3545', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>{r.fee_status || 'Unpaid'}</button>
                   </div>
                 </div>
               </div>
@@ -274,8 +313,8 @@ function App() {
           </div>
         )}
 
-        {/* ADMISSION FORM */}
-        {view === 'add' && (
+        {/* ADMISSION FORM (Admin Only) */}
+        {view === 'add' && userRole === 'admin' && (
           <div style={cardStyle}>
             <h3>{editingStudent ? "Update Student" : "New Admission"}</h3>
             <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
@@ -295,19 +334,17 @@ function App() {
                 class: selectedClass, base_fee: Number(baseFee) || 0, arrears: Number(arrears) || 0,
                 total_dues: total, fee_status: editingStudent ? editingStudent.fee_status : 'Unpaid'
               };
-              if(editingStudent) {
-                await updateDoc(doc(db, "ali_campus_records", editingStudent.id), data);
-              } else {
-                await addDoc(collection(db, "ali_campus_records"), { ...data, created_at: serverTimestamp() });
-              }
+              if(editingStudent) await updateDoc(doc(db, "ali_campus_records", editingStudent.id), data);
+              else await addDoc(collection(db, "ali_campus_records"), { ...data, created_at: serverTimestamp() });
               setView('dashboard'); setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears(''); setEditingStudent(null);
-            }} style={actionBtn}>{editingStudent ? "Update" : "Register"}</button>
+            }} style={actionBtn}>Confirm</button>
           </div>
         )}
 
-        {/* ATTENDANCE SECTION */}
+        {/* ATTENDANCE SECTION (Shared) */}
         {view === 'attendance' && (
           <div>
+            <h3>Attendance: {filterClass}</h3>
             {records.map(r => (
               <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', backgroundColor: attendance[r.student_name] === 'P' ? '#f0fff4' : attendance[r.student_name] === 'A' ? '#fff5f5' : 'white'}}>
                 <span>{r.student_name}</span>
@@ -317,37 +354,26 @@ function App() {
                 </div>
               </div>
             ))}
-            <button disabled={Object.keys(attendance).length === 0} onClick={async () => { await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); }} style={actionBtn}>Save</button>
+            <button disabled={Object.keys(attendance).length === 0} onClick={async () => { await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() }); setView('dashboard'); setAttendance({}); alert("Saved!"); }} style={actionBtn}>Save Attendance</button>
           </div>
         )}
 
-        {/* HISTORY SECTION */}
+        {/* HISTORY SECTION (Shared) */}
         {view === 'history' && (
           <div>
             {history.map(h => (
               <div key={h.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between'}}>
-                  <span><b>{h.date}</b> ({h.class})</span>
-                  <button onClick={() => downloadPDF(h)} style={{background:'#1a4a8e', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px'}}>PDF</button>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <span><b>{h.date}</b> <br/> <small>{h.class}</small></span>
+                  <button onClick={() => downloadPDF(h)} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontSize:'12px'}}>PDF</button>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* REPORTS SECTION */}
-        {view === 'sel_report' && (
-          <div style={cardStyle}>
-            <h3>Monthly Report</h3>
-            <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />
-            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
-              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={() => generateMonthlySummary(filterClass)} style={actionBtn}>Generate Summary</button>
-          </div>
-        )}
-
-        {view === 'monthly_report' && (
+        {/* REPORT & SELECTION (Admin Only) */}
+        {view === 'monthly_report' && userRole === 'admin' && (
           <div>
             <h3 style={{textAlign:'center'}}>{filterClass} - {selectedMonth}</h3>
             <div style={{background:'white', borderRadius:'12px', padding:'10px', overflowX:'auto'}}>
@@ -365,16 +391,19 @@ function App() {
                 </tbody>
               </table>
             </div>
-            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#666', marginTop:'10px'}}>Back</button>
           </div>
         )}
 
-        {(view === 'sel_view' || view === 'sel_att') && (
+        {(view === 'sel_view' || view === 'sel_att' || view === 'sel_report') && (
           <div style={cardStyle}>
+            <h3>Select Class</h3>
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button onClick={() => fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass)} style={actionBtn}>Open</button>
+            <button onClick={() => {
+              if (view === 'sel_report') generateMonthlySummary(filterClass);
+              else fetchRecordsByClass(view === 'sel_view' ? 'view' : 'attendance', filterClass);
+            }} style={actionBtn}>Open</button>
           </div>
         )}
       </div>
@@ -382,8 +411,8 @@ function App() {
   );
 }
 
-const cardStyle = { background: 'white', padding: '12px', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', marginBottom: '10px' };
-const inputStyle = { width: '100%', padding: '10px', margin: '5px 0', borderRadius: '8px', border: '1px solid #ddd' };
-const actionBtn = { width: '100%', padding: '12px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginTop: '10px' };
+const cardStyle = { background: 'white', padding: '12px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '10px' };
+const inputStyle = { width: '100%', padding: '12px', margin: '5px 0', borderRadius: '8px', border: '1px solid #ddd', boxSizing:'border-box' };
+const actionBtn = { width: '100%', padding: '14px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginTop: '10px', cursor:'pointer' };
 
 export default App;
