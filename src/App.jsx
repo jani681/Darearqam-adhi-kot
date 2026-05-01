@@ -1,4 +1,4 @@
-Import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db } from './firebase';
 import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc } from "firebase/firestore"; 
 import jsPDF from 'jspdf';
