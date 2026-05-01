@@ -3,12 +3,13 @@ import { db } from './firebase';
 import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc } from "firebase/firestore"; 
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { Html5QrcodeScanner } from 'html5-qrcode'; // Mobile CDN handled via logic
+
+// --- MOBILE FRIENDLY: No Import needed for html5-qrcode ---
 
 const CLASSES = ["Playgroup", "Nursery", "KG", "1st Class", "2nd Class", "3rd Class", "4th Class", "5th Class", "6th Class", "7th Class", "8th Class", "9th Class", "10th Class"];
 const ADMIN_PASSWORD = "ali786"; 
 const SCHOOL_COORDS = { lat: 32.1072678, lon: 71.8037100 };
-const ALLOWED_DISTANCE = 0.5; // 500 Meters (in KM)
+const ALLOWED_DISTANCE = 0.5; // 500 Meters
 const QR_SECRET = "ALICAMPUS-STAFF-2026";
 
 function App() {
@@ -29,7 +30,7 @@ function App() {
   
   const today = new Date().toISOString().split('T')[0];
 
-  // Logic for Distance Calculation
+  // Helper for Distance
   const getDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; 
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -41,24 +42,26 @@ function App() {
     return R * c; 
   };
 
-  // Start QR Scanner
+  // --- UPDATED SCANNER LOGIC FOR MOBILE ---
   const startScanner = () => {
     setView('qr_scanner');
-    setTimeout(() => {
-      const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-      scanner.render(onScanSuccess, onScanError);
-    }, 500);
-  };
-
-  const onScanSuccess = (decodedText) => {
-    if (decodedText === QR_SECRET) {
-      handleAttendanceLogic();
+    // We check if the library is loaded from the script tag
+    if (window.Html5QrcodeScanner) {
+      setTimeout(() => {
+        const scanner = new window.Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        scanner.render((decodedText) => {
+          if (decodedText === QR_SECRET) {
+            scanner.clear(); // Stop camera
+            handleAttendanceLogic();
+          } else {
+            alert("Ghalat QR Code hai!");
+          }
+        }, (err) => {});
+      }, 500);
     } else {
-      alert("Invalid QR Code!");
+      alert("Scanner library load ho rahi hai, please 2 second baad dobara koshish karein.");
     }
   };
-
-  const onScanError = (err) => { /* Ignore standard scan errors */ };
 
   const handleAttendanceLogic = () => {
     if (navigator.geolocation) {
@@ -73,7 +76,6 @@ function App() {
               date: today,
               time: new Date().toLocaleTimeString(),
               status: "Present",
-              location: "School Boundary",
               timestamp: serverTimestamp()
             });
             setAttendanceSuccess(true);
@@ -81,15 +83,13 @@ function App() {
             setView('dashboard');
           } catch (e) { alert("Database Error!"); }
         } else {
-          alert(`Boundary Error: Aap school se ${(distance * 1000).toFixed(0)}m door hain. 500m ke andar honi chahiye.`);
+          alert(`Aap school se ${(distance * 1000).toFixed(0)}m door hain. 500m ke andar hona zaroori hai.`);
+          setView('dashboard');
         }
-      });
-    } else {
-      alert("Please enable GPS/Location!");
+      }, (err) => alert("Location access allow karein!"), { enableHighAccuracy: true });
     }
   };
 
-  // Check if already marked today
   useEffect(() => {
     const checkStatus = async () => {
       if (isLoggedIn && userRole === 'staff') {
@@ -99,9 +99,8 @@ function App() {
       }
     };
     checkStatus();
-  }, [isLoggedIn, staffName]);
+  }, [isLoggedIn, staffName, today]);
 
-  // Rest of your functions (Admin Login, Staff Records, History, etc.) remain untouched
   const handleLogin = async () => {
     if (passInput === ADMIN_PASSWORD) { setUserRole('admin'); setIsLoggedIn(true); return; }
     try {
@@ -110,7 +109,7 @@ function App() {
       if (!snap.empty) {
         setStaffName(snap.docs[0].data().name);
         setUserRole('staff'); setIsLoggedIn(true);
-      } else { alert("Invalid Password!"); }
+      } else { alert("Ghalat Password!"); }
     } catch (e) { alert("Login Error"); }
   };
 
@@ -130,18 +129,18 @@ function App() {
     setView(target);
   };
 
-  const getNavStyle = (targetView) => ({
-    padding: '12px 5px', borderRadius: '10px', border: 'none', fontWeight: 'bold', fontSize: '9px',
-    cursor: 'pointer', backgroundColor: view === targetView ? '#f39c12' : '#ffffff', color: '#1a4a8e',
-    boxShadow: view === targetView ? 'inset 0 4px 6px rgba(0,0,0,0.2)' : '0 4px 0 #bdc3c7',
+  const getNavStyle = (v) => ({
+    padding: '12px 5px', borderRadius: '10px', border: 'none', fontWeight: 'bold', fontSize: '10px',
+    backgroundColor: view === v ? '#f39c12' : '#ffffff', color: '#1a4a8e',
+    boxShadow: view === v ? 'inset 0 4px 6px rgba(0,0,0,0.2)' : '0 4px 0 #bdc3c7',
   });
 
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
-      <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', backgroundColor: 'white', padding: '5px', marginBottom:'15px' }} />
-      <h3>Ali Campus Management</h3>
+      <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', backgroundColor: 'white', padding: '5px', marginBottom:'20px' }} />
+      <h3 style={{marginBottom:'20px'}}>Ali Campus Management</h3>
       <input type="password" placeholder="Enter Password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', border:'none', textAlign:'center'}} />
-      <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', borderRadius:'8px', border:'none', background:'#f39c12', color:'white', fontWeight:'bold', fontSize:'16px'}}>LOGIN</button>
+      <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', borderRadius:'8px', border:'none', background:'#f39c12', color:'white', fontWeight:'bold'}}>LOGIN</button>
     </div>
   );
 
@@ -151,58 +150,54 @@ function App() {
         <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         {userRole === 'staff' && <div style={{ color:'white', marginTop:'5px' }}>Teacher: {staffName}</div>}
         
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px', marginTop:'10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px', marginTop:'15px' }}>
           <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
-          {userRole === 'admin' && <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Dir</button>}
           <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Atten</button>
-          <button onClick={() => setIsLoggedIn(false)} style={getNavStyle('logout')}>🚪 Out</button>
+          <button onClick={() => { setIsLoggedIn(false); setPassInput(''); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
 
       <div style={{ padding: '15px', maxWidth: '600px', margin: 'auto' }}>
         
-        {/* --- STAFF ATTENDANCE PANEL --- */}
+        {/* STAFF PANEL */}
         {userRole === 'staff' && view === 'dashboard' && (
-          <div style={{ background:'white', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'15px', border:'2px solid #1a4a8e' }}>
+          <div style={{ background:'white', padding:'20px', borderRadius:'12px', textAlign:'center', marginBottom:'15px', boxShadow:'0 4px 12px rgba(0,0,0,0.1)' }}>
             {isMarkedToday ? (
-              <div style={{ color: '#28a745', fontWeight: 'bold' }}>✅ Attendance Marked for Today</div>
+              <div style={{ color: '#28a745', fontWeight: 'bold', fontSize:'18px' }}>✅ Attendance Marked!</div>
             ) : (
               <>
-                <p>Please Scan QR inside School Boundary</p>
-                <button onClick={startScanner} style={{ background:'#1a4a8e', color:'white', border:'none', padding:'10px 20px', borderRadius:'8px', fontWeight:'bold' }}>📸 OPEN SCANNER</button>
+                <p style={{marginBottom:'15px'}}>Pehle QR scan karein phir attendance hogi.</p>
+                <button onClick={startScanner} style={{ background:'#1a4a8e', color:'white', border:'none', padding:'12px 25px', borderRadius:'8px', fontWeight:'bold' }}>📸 SCAN QR CODE</button>
               </>
             )}
           </div>
         )}
 
-        {/* --- SUCCESS POPUP --- */}
         {attendanceSuccess && (
-          <div style={{ background:'#d4edda', color:'#155724', padding:'15px', borderRadius:'10px', textAlign:'center', marginBottom:'15px' }}>
-             <h3>✅ SUCCESS!</h3>
-             <p>Aapki attendance lag chuki hai.<br/>Time: {new Date().toLocaleTimeString()}</p>
-             <button onClick={() => setAttendanceSuccess(false)} style={{ border:'none', background:'#155724', color:'white', padding:'5px 15px', borderRadius:'5px' }}>OK</button>
+          <div style={{ background:'#d4edda', color:'#155724', padding:'15px', borderRadius:'10px', textAlign:'center', marginBottom:'15px', border:'1px solid #c3e6cb' }}>
+             <h3 style={{margin:'0 0 5px 0'}}>✅ SHABASH!</h3>
+             <p style={{margin:0}}>Aapki attendance lag gayi hai.</p>
+             <button onClick={() => setAttendanceSuccess(false)} style={{ marginTop:'10px', border:'none', background:'#155724', color:'white', padding:'5px 15px', borderRadius:'5px' }}>Theek Hai</button>
           </div>
         )}
 
         {view === 'qr_scanner' && (
           <div style={{ background:'white', padding:'10px', borderRadius:'10px' }}>
             <div id="reader" style={{ width: '100%' }}></div>
-            <button onClick={() => setView('dashboard')} style={{ width:'100%', marginTop:'10px', padding:'10px', background:'#dc3545', color:'white', border:'none', borderRadius:'8px' }}>Cancel</button>
+            <button onClick={() => setView('dashboard')} style={{ width:'100%', marginTop:'10px', padding:'12px', background:'#dc3545', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>Cancel</button>
           </div>
         )}
 
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
             {CLASSES.map(c => (
-              <div key={c} onClick={() => fetchRecordsByClass(userRole === 'admin' ? 'view' : 'attendance', c)} style={{ background:'white', padding:'12px', borderRadius:'12px', borderLeft:'5px solid #f39c12', cursor: 'pointer'}}>
+              <div key={c} onClick={() => fetchRecordsByClass(userRole === 'admin' ? 'view' : 'attendance', c)} style={{ background:'white', padding:'15px', borderRadius:'12px', borderLeft:'5px solid #f39c12', boxShadow:'0 2px 5px rgba(0,0,0,0.05)'}}>
                 <small style={{color:'#1a4a8e', fontWeight:'bold'}}>{c}</small>
-                <div style={{fontSize:'20px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
+                <div style={{fontSize:'22px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
               </div>
             ))}
           </div>
         )}
-
-        {/* (Rest of the views like Admission, Directory, etc. follow the same locked logic) */}
       </div>
     </div>
   );
