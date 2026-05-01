@@ -48,7 +48,12 @@ function App() {
     const doc = new jsPDF();
     doc.text("Ali Campus - Dar-e-Arqam", 14, 15);
     doc.text(title, 14, 22);
-    doc.autoTable({ head: [headers], body: bodyData, startY: 30 });
+    doc.autoTable({ 
+      head: [headers], 
+      body: bodyData, 
+      startY: 30,
+      headStyles: { fillColor: [26, 74, 142] }
+    });
     doc.save(`${fileName}.pdf`);
   };
 
@@ -73,7 +78,7 @@ function App() {
     }, () => alert("Enable Location Access!"));
   };
 
-  // --- DATA SYNC LOGIC (BLANK ISSUE FIX) ---
+  // --- DATA SYNC LOGIC (ANTI-BLANK) ---
   const syncData = async () => {
     if (!isLoggedIn) return;
     try {
@@ -176,7 +181,6 @@ function App() {
           </div>
         )}
 
-        {/* Keeping existing selection logic for Directory, Attendance, and Reports */}
         {(view==='sel_view'||view==='sel_att'||view==='sel_report') && (
           <div style={cardStyle}>
             <h3>Select Class</h3>
