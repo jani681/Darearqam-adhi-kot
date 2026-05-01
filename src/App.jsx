@@ -37,12 +37,13 @@ export default function App() {
   const [sSalary, setSSalary] = useState('');
   const [sPass, setSPass] = useState('');
 
+  // Report States
   const [monthlyData, setMonthlyData] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const today = new Date().toISOString().split('T')[0];
 
-  // --- CORE FUNCTIONS ---
+  // --- REUSABLE FUNCTIONS ---
   const fetchStats = async () => {
     try {
       const snap = await getDocs(collection(db, "ali_campus_records"));
@@ -62,7 +63,6 @@ export default function App() {
       fetchStats();
       return;
     }
-
     setStatus('Verifying Staff...');
     try {
       const q = query(collection(db, "staff_records"), where("password", "==", passInput));
@@ -73,10 +73,7 @@ export default function App() {
         setUserRole('staff');
         setIsLoggedIn(true);
         fetchStats(); 
-        setStatus('Staff Login Success');
-      } else {
-        alert("Invalid Password!");
-      }
+      } else { alert("Invalid Password!"); }
     } catch (e) { setStatus('Error'); }
   };
 
@@ -86,27 +83,56 @@ export default function App() {
       setFilterClass(cls);
       const q = query(collection(db, "ali_campus_records"), where("class", "==", cls));
       const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setRecords(data);
+      setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setView(target);
       setStatus('Ready');
     } catch (e) { setStatus('Error'); }
   };
 
-  // --- UI STYLES ---
+  const downloadPDF = (record) => {
+    const doc = new jsPDF();
+    doc.setFontSize(18); doc.setTextColor(26, 74, 142);
+    doc.text("DAR-E-ARQAM (ALI CAMPUS)", 105, 15, { align: "center" });
+    doc.setFontSize(12); doc.setTextColor(0,0,0);
+    doc.text(`Class: ${record.class} | Date: ${record.date}`, 14, 25);
+    const rows = Object.entries(record.attendance_data).map(([name, stat], i) => [i+1, name, stat === 'P' ? 'Present' : 'Absent']);
+    doc.autoTable({ startY: 35, head: [['Sr.', 'Student Name', 'Status']], body: rows, headStyles: { fillColor: [26, 74, 142] } });
+    doc.save(`Attendance_${record.class}_${record.date}.pdf`);
+  };
+
+  const generateReport = async (cls) => {
+    setStatus('Generating Report...');
+    try {
+      const q = query(collection(db, "daily_attendance"), where("class", "==", cls));
+      const snap = await getDocs(q);
+      const summary = {};
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.date?.startsWith(selectedMonth)) {
+          Object.entries(data.attendance_data).forEach(([name, status]) => {
+            if (!summary[name]) summary[name] = { p: 0, a: 0 };
+            status === 'P' ? summary[name].p++ : summary[name].a++;
+          });
+        }
+      });
+      setMonthlyData(Object.entries(summary));
+      setView('monthly_report');
+    } catch (e) { setStatus('Report Error'); }
+  };
+
+  // --- STYLES ---
   const getNavStyle = (targetView) => ({
     padding: '12px 5px', borderRadius: '10px', border: 'none', fontWeight: 'bold', fontSize: '9px',
-    cursor: 'pointer', backgroundColor: view === targetView ? '#f39c12' : '#ffffff',
-    color: '#1a4a8e', boxShadow: view === targetView ? 'inset 0 4px 6px rgba(0,0,0,0.2)' : '0 4px 0 #bdc3c7',
+    backgroundColor: view === targetView ? '#f39c12' : '#ffffff', color: '#1a4a8e',
+    boxShadow: view === targetView ? 'inset 0 4px 6px rgba(0,0,0,0.2)' : '0 4px 0 #bdc3c7', cursor:'pointer'
   });
-
   const cardStyle = { background: 'white', padding: '12px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '10px' };
   const inputStyle = { width: '100%', padding: '12px', margin: '5px 0', borderRadius: '8px', border: '1px solid #ddd', boxSizing:'border-box' };
   const actionBtn = { width: '100%', padding: '14px', backgroundColor: '#1a4a8e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginTop: '10px' };
 
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
-      <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', backgroundColor: 'white', padding: '5px', marginBottom:'10px' }} />
+      <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', backgroundColor: 'white', padding: '5px', marginBottom:'15px' }} />
       <h3>Ali Campus Management</h3>
       <input type="password" placeholder="Password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', border:'none', textAlign:'center'}} />
       <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', borderRadius:'8px', border:'none', background:'#f39c12', color:'white', fontWeight:'bold'}}>LOGIN</button>
@@ -115,23 +141,23 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
-      {/* Header Section */}
+      {/* HEADER & NAV */}
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center' }}>
         <h2 style={{ color: 'white', margin: '0 0 15px 0', fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
           <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
-          {userRole === 'admin' && <button onClick={() => setView('add')} style={getNavStyle('add')}>📝 Admit</button>}
+          {userRole === 'admin' && <button onClick={() => {setEditingStudent(null); setView('add');}} style={getNavStyle('add')}>📝 Admit</button>}
           {userRole === 'admin' && <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Dir</button>}
           <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Atten</button>
           {userRole === 'admin' && <button onClick={async () => {
-            const snap = await getDocs(query(collection(db, "staff_records"), orderBy("created_at", "desc")));
-            setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            setView('staff_list');
+             const snap = await getDocs(query(collection(db, "staff_records"), orderBy("created_at", "desc")));
+             setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+             setView('staff_list');
           }} style={getNavStyle('staff_list')}>👥 Staff</button>}
           <button onClick={async () => {
-            const snap = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp", "desc")));
-            setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            setView('history');
+             const snap = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp", "desc")));
+             setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+             setView('history');
           }} style={getNavStyle('history')}>📜 Hist</button>
           {userRole === 'admin' && <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>}
           <button onClick={() => { setIsLoggedIn(false); setPassInput(''); }} style={getNavStyle('logout')}>🚪 Out</button>
@@ -139,15 +165,14 @@ export default function App() {
       </div>
 
       <div style={{ padding: '15px', maxWidth: '600px', margin: 'auto' }}>
-        {/* Staff Identity Box */}
         {userRole === 'staff' && staffData && (
-          <div style={{...cardStyle, background: '#1a4a8e', color:'white'}}>
-            <h4 style={{margin:0}}>Welcome, {staffData.name}</h4>
+          <div style={{...cardStyle, background:'#1a4a8e', color:'white'}}>
+            <h4>Staff: {staffData.name}</h4>
             <small>{staffData.role} | Salary: {staffData.salary}</small>
           </div>
         )}
 
-        {/* Home / Dashboard View */}
+        {/* DASHBOARD */}
         {view === 'dashboard' && (
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
             {CLASSES.map(c => (
@@ -160,48 +185,74 @@ export default function App() {
           </div>
         )}
 
-        {/* Directory (Admin Only) */}
+        {/* ADMIT FORM (ALL FIELDS ADDED) */}
+        {view === 'add' && userRole === 'admin' && (
+          <div style={cardStyle}>
+            <h3>{editingStudent ? 'Edit Student' : 'New Admission'}</h3>
+            <input placeholder="Student Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <input placeholder="WhatsApp (923...)" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
+            <div style={{display:'flex', gap:'10px'}}>
+              <input type="number" placeholder="Base Fee" value={baseFee} onChange={(e)=>setBaseFee(e.target.value)} style={inputStyle} />
+              <input type="number" placeholder="Arrears" value={arrears} onChange={(e)=>setArrears(e.target.value)} style={inputStyle} />
+            </div>
+            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={async () => {
+              const total = (Number(baseFee) || 0) + (Number(arrears) || 0);
+              const data = { student_name: name, roll_number: rollNo, parent_whatsapp: whatsapp, class: selectedClass, base_fee: Number(baseFee), arrears: Number(arrears), total_dues: total };
+              if(editingStudent) await updateDoc(doc(db, "ali_campus_records", editingStudent.id), data);
+              else await addDoc(collection(db, "ali_campus_records"), { ...data, created_at: serverTimestamp() });
+              alert("Done!"); setView('dashboard'); fetchStats();
+            }} style={actionBtn}>Confirm</button>
+          </div>
+        )}
+
+        {/* DIRECTORY (ADMIN) */}
         {view === 'view' && userRole === 'admin' && (
           <div>
-            <input placeholder="Search Student..." onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
+            <input placeholder="🔍 Search Students..." onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
             {records.filter(r => r.student_name?.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
               <div key={r.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between'}}>
-                  <span><b>{r.student_name}</b><br/><small>Roll: {r.roll_number}</small></span>
-                  <button onClick={async () => {
-                     if(window.confirm("Delete?")) {
-                       await deleteDoc(doc(db, "ali_campus_records", r.id));
-                       fetchRecordsByClass('view', filterClass);
-                     }
-                  }} style={{background:'#dc3545', color:'white', border:'none', borderRadius:'5px', padding:'5px'}}>Del</button>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <span><b>{r.student_name}</b> <br/> <small>Roll: {r.roll_number} | Dues: {r.total_dues}</small></span>
+                  <div style={{display:'flex', gap:'5px'}}>
+                    <button onClick={() => {
+                      setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp);
+                      setBaseFee(r.base_fee); setArrears(r.arrears); setSelectedClass(r.class); setView('add');
+                    }} style={{background:'#f39c12', color:'white', border:'none', padding:'5px', borderRadius:'5px'}}>Edit</button>
+                    <button onClick={async () => { if(window.confirm("Delete?")) { await deleteDoc(doc(db, "ali_campus_records", r.id)); fetchRecordsByClass('view', filterClass); }}} style={{background:'#dc3545', color:'white', border:'none', padding:'5px', borderRadius:'5px'}}>Del</button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Admit Form (Admin Only) */}
-        {view === 'add' && userRole === 'admin' && (
-          <div style={cardStyle}>
-            <h3>Student Admission</h3>
-            <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
-            <input placeholder="Roll No" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
-            <input placeholder="WhatsApp" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
-            <input type="number" placeholder="Fee" value={baseFee} onChange={(e)=>setBaseFee(e.target.value)} style={inputStyle} />
-            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
-              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={async () => {
-              await addDoc(collection(db, "ali_campus_records"), {
-                student_name: name, roll_number: rollNo, parent_whatsapp: whatsapp,
-                class: selectedClass, base_fee: Number(baseFee), created_at: serverTimestamp()
-              });
-              alert("Saved!"); setView('dashboard'); fetchStats();
-            }} style={actionBtn}>Save Student</button>
+        {/* STAFF LIST (ADMIN - PAY & DETAILS) */}
+        {view === 'staff_list' && userRole === 'admin' && (
+          <div>
+            <div style={cardStyle}>
+              <h3>Register Staff</h3>
+              <input placeholder="Staff Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle} />
+              <input placeholder="Role" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle} />
+              <input type="number" placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle} />
+              <input placeholder="Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle} />
+              <button onClick={async () => {
+                await addDoc(collection(db, "staff_records"), { name: sName, role: sRole, salary: sSalary, password: sPass, created_at: serverTimestamp() });
+                setSName(''); setSPass(''); alert("Staff Added");
+              }} style={actionBtn}>Save Staff</button>
+            </div>
+            {staffRecords.map(s => (
+              <div key={s.id} style={{...cardStyle, borderLeft:'5px solid #1a4a8e'}}>
+                <b>{s.name}</b> <br/> <small>{s.role} | Pay: {s.salary} | PWD: {s.password}</small>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Attendance (Shared) */}
+        {/* ATTENDANCE & HISTORY (PDF ADDED) */}
         {view === 'attendance' && (
           <div>
             <h3>Attendance: {filterClass}</h3>
@@ -209,51 +260,60 @@ export default function App() {
               <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between'}}>
                 <span>{r.student_name}</span>
                 <div style={{display:'flex', gap:'5px'}}>
-                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{background: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px'}}>P</button>
-                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{background: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px'}}>A</button>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'P'})} style={{background: attendance[r.student_name] === 'P' ? '#28a745' : '#ccc', color:'white', border:'none', padding:'8px', borderRadius:'5px'}}>P</button>
+                  <button onClick={() => setAttendance({...attendance, [r.student_name]: 'A'})} style={{background: attendance[r.student_name] === 'A' ? '#dc3545' : '#ccc', color:'white', border:'none', padding:'8px', borderRadius:'5px'}}>A</button>
                 </div>
               </div>
             ))}
-            <button disabled={records.length === 0} onClick={async () => {
+            <button onClick={async () => {
               await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() });
-              alert("Attendance Saved!"); setView('dashboard'); setAttendance({});
+              alert("Saved!"); setView('dashboard');
             }} style={actionBtn}>Submit</button>
           </div>
         )}
 
-        {/* Staff List (Admin Only) */}
-        {view === 'staff_list' && userRole === 'admin' && (
-          <div>
-            <div style={cardStyle}>
-              <h3>Add Staff</h3>
-              <input placeholder="Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle} />
-              <input placeholder="Role" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle} />
-              <input placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle} />
-              <input placeholder="Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle} />
-              <button onClick={async () => {
-                await addDoc(collection(db, "staff_records"), { name: sName, role: sRole, salary: sSalary, password: sPass, created_at: serverTimestamp() });
-                setSName(''); setSPass(''); alert("Staff Registered");
-              }} style={actionBtn}>Add</button>
-            </div>
-            {staffRecords.map(s => (
-              <div key={s.id} style={cardStyle}><b>{s.name}</b> ({s.role}) - PWD: {s.password}</div>
-            ))}
-          </div>
-        )}
-
-        {/* History View (Shared) */}
         {view === 'history' && (
           <div>
             {history.map(h => (
-              <div key={h.id} style={cardStyle}><b>{h.date}</b> - {h.class}</div>
+              <div key={h.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <span><b>{h.date}</b> <br/> {h.class}</span>
+                  <button onClick={() => downloadPDF(h)} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px'}}>PDF</button>
+                </div>
+              </div>
             ))}
           </div>
         )}
 
-        {/* Selection Screens */}
+        {/* REPORTS (ADMIN) */}
+        {view === 'sel_report' && userRole === 'admin' && (
+          <div style={cardStyle}>
+            <h3>Monthly Report</h3>
+            <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />
+            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={() => generateReport(filterClass)} style={actionBtn}>Generate</button>
+          </div>
+        )}
+
+        {view === 'monthly_report' && (
+          <div style={cardStyle}>
+            <h3>Report: {filterClass}</h3>
+            <table style={{width:'100%', fontSize:'12px'}}>
+              <thead><tr><th align="left">Name</th><th>P</th><th>A</th></tr></thead>
+              <tbody>
+                {monthlyData.map(([name, stat]) => (
+                  <tr key={name}><td>{name}</td><td align="center">{stat.p}</td><td align="center" style={{color:'red'}}>{stat.a}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <button onClick={()=>setView('dashboard')} style={actionBtn}>Back</button>
+          </div>
+        )}
+
         {(view === 'sel_view' || view === 'sel_att') && (
           <div style={cardStyle}>
-            <h3>Select Class</h3>
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
