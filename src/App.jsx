@@ -28,7 +28,7 @@ function App() {
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
   const [editingStudent, setEditingStudent] = useState(null);
 
-  // Staff States (New)
+  // Staff States
   const [staffRecords, setStaffRecords] = useState([]);
   const [sName, setSName] = useState('');
   const [sRole, setSRole] = useState('');
@@ -75,7 +75,7 @@ function App() {
     }
   };
 
-  // --- EXISTING FUNCTIONS ---
+  // --- STUDENT & ATTENDANCE FUNCTIONS ---
   const downloadPDF = (record) => {
     const doc = new jsPDF();
     doc.setFontSize(18);
@@ -176,7 +176,7 @@ function App() {
     borderRadius: '10px',
     border: 'none',
     fontWeight: 'bold',
-    fontSize: '10px',
+    fontSize: '9px', // Reduced slightly for 4 columns
     cursor: 'pointer',
     backgroundColor: view === targetView ? '#f39c12' : '#ffffff',
     color: '#1a4a8e',
@@ -198,13 +198,16 @@ function App() {
           <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'white', padding: '2px' }} />
           <h2 style={{ color: 'white', margin: 0, fontSize: '18px' }}>DAR-E-ARQAM (ALI CAMPUS)</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
+        {/* Updated Grid to 4 Columns to fit all buttons */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', backgroundColor: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>
           <button onClick={() => { setView('dashboard'); setEditingStudent(null); }} style={getNavStyle('dashboard')}>🏠 Home</button>
-          <button onClick={() => { setView('add'); setEditingStudent(null); }} style={getNavStyle('add')}>📝 Admission</button>
-          <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Directory</button>
-          <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Attend</button>
+          <button onClick={() => { setView('add'); setEditingStudent(null); }} style={getNavStyle('add')}>📝 Admit</button>
+          <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Dir</button>
+          <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Atten</button>
           <button onClick={fetchStaff} style={getNavStyle('staff_list')}>👥 Staff</button>
-          <button onClick={fetchHistory} style={getNavStyle('history')}>📜 History</button>
+          <button onClick={fetchHistory} style={getNavStyle('history')}>📜 Hist</button>
+          <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>
+          <button onClick={() => setIsLoggedIn(false)} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
 
@@ -222,7 +225,7 @@ function App() {
           </div>
         )}
 
-        {/* STAFF SECTION (New) */}
+        {/* STAFF SECTION */}
         {view === 'staff_list' && (
           <div>
             <div style={cardStyle}>
@@ -248,6 +251,7 @@ function App() {
           </div>
         )}
 
+        {/* STUDENT DIRECTORY */}
         {view === 'view' && (
           <div>
             <input placeholder="🔍 Search..." value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
@@ -270,6 +274,7 @@ function App() {
           </div>
         )}
 
+        {/* ADMISSION FORM */}
         {view === 'add' && (
           <div style={cardStyle}>
             <h3>{editingStudent ? "Update Student" : "New Admission"}</h3>
@@ -300,7 +305,7 @@ function App() {
           </div>
         )}
 
-        {/* Other Views (Attendance, History, Reports) remain unchanged */}
+        {/* ATTENDANCE SECTION */}
         {view === 'attendance' && (
           <div>
             {records.map(r => (
@@ -316,6 +321,7 @@ function App() {
           </div>
         )}
 
+        {/* HISTORY SECTION */}
         {view === 'history' && (
           <div>
             {history.map(h => (
@@ -326,6 +332,40 @@ function App() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* REPORTS SECTION */}
+        {view === 'sel_report' && (
+          <div style={cardStyle}>
+            <h3>Monthly Report</h3>
+            <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />
+            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={() => generateMonthlySummary(filterClass)} style={actionBtn}>Generate Summary</button>
+          </div>
+        )}
+
+        {view === 'monthly_report' && (
+          <div>
+            <h3 style={{textAlign:'center'}}>{filterClass} - {selectedMonth}</h3>
+            <div style={{background:'white', borderRadius:'12px', padding:'10px', overflowX:'auto'}}>
+              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'12px'}}>
+                <thead><tr style={{borderBottom:'2px solid #eee'}}><th style={{textAlign:'left'}}>Name</th><th>P</th><th>A</th><th>%</th></tr></thead>
+                <tbody>
+                  {monthlyData.map(([stdName, stats]) => (
+                    <tr key={stdName} style={{borderBottom:'1px solid #eee'}}>
+                      <td style={{padding:'8px'}}><b>{stdName}</b></td>
+                      <td style={{textAlign:'center'}}>{stats.p}</td>
+                      <td style={{textAlign:'center', color:'red'}}>{stats.a}</td>
+                      <td style={{textAlign:'center', fontWeight:'bold'}}>{((stats.p / (stats.p+stats.a))*100).toFixed(0)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#666', marginTop:'10px'}}>Back</button>
           </div>
         )}
 
