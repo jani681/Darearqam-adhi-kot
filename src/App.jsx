@@ -61,9 +61,13 @@ function App() {
   const [previewHeaders, setPreviewHeaders] = useState([]);
   const [previewFileName, setPreviewFileName] = useState('');
 
-  // NEW FILTER STATES
+  // FILTER STATES
   const [searchQuery, setSearchQuery] = useState('');
   const [classFilter, setClassFilter] = useState('All');
+
+  // NEW NOTIFICATION STATES
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
 
   const [adminAnalytics, setAdminAnalytics] = useState({
     totalStudents: 0,
@@ -74,6 +78,17 @@ function App() {
   });
 
   const today = new Date().toISOString().split('T')[0];
+
+  // ===== NOTIFICATION HELPER =====
+  const addNotification = (msg, type = 'success') => {
+    const newNotif = {
+      id: Date.now(),
+      message: msg,
+      type: type,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setNotifications(prev => [newNotif, ...prev].slice(0, 20)); // Keep last 20
+  };
 
   // ===== SMART FILTERING LOGIC =====
   const getFilteredRecords = () => {
@@ -110,6 +125,7 @@ function App() {
     link.click();
     document.body.removeChild(link);
     setShowPreview(false);
+    addNotification(`Exported ${fileName} successfully`, 'info');
   };
 
   const handleExportStudents = async () => {
@@ -194,6 +210,7 @@ function App() {
         doc.text(`Generated on: ${new Date().toLocaleString()} | Page ${i} of ${pageCount}`, 14, 285);
     }
     doc.save(`${fileName}.pdf`);
+    addNotification(`Generated PDF: ${fileName}`, 'info');
   };
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -211,13 +228,24 @@ function App() {
       const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, SCHOOL_COORDS.lat, SCHOOL_COORDS.lng);
       if (dist <= 500) {
         await addDoc(collection(db, "teacher_attendance"), { name: staffName, date: today, time: new Date().toLocaleTimeString(), timestamp: serverTimestamp(), distance: Math.round(dist) + "m" });
-        alert("Attendance Marked!"); setStatus('Done');
-      } else { alert(`Too far! ${Math.round(dist)}m.`); setStatus('Out of Range'); }
+        alert("Attendance Marked!"); 
+        setStatus('Done');
+        addNotification("Attendance marked successfully", "success");
+      } else { 
+        alert(`Too far! ${Math.round(dist)}m.`); 
+        setStatus('Out of Range');
+        addNotification(`Failed: Out of range (${Math.round(dist)}m)`, "warning");
+      }
     }, () => alert("Enable Location Access!"));
   };
 
   const handleLogin = async () => {
-    if (passInput === ADMIN_PASSWORD) { setUserRole('admin'); setIsLoggedIn(true); return; }
+    if (passInput === ADMIN_PASSWORD) { 
+      setUserRole('admin'); 
+      setIsLoggedIn(true); 
+      addNotification("Logged in as Admin", "info");
+      return; 
+    }
     try {
       const q = query(collection(db, "staff_records"), where("password", "==", passInput));
       const snap = await getDocs(q);
@@ -227,6 +255,7 @@ function App() {
         setMyProfileData(teacherData); 
         setUserRole('staff'); 
         setIsLoggedIn(true); 
+        addNotification(`Welcome back, ${teacherData.name}`, "info");
       } else alert("Wrong Password!");
     } catch (e) { alert("Login Error"); }
   };
@@ -321,7 +350,44 @@ function App() {
         </div>
       )}
 
-      <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center', color:'white' }}>
+      {/* NOTIFICATION PANEL OVERLAY */}
+      {showNotifPanel && (
+        <div style={{ position: 'fixed', top: '70px', right: '15px', width: '280px', maxHeight: '400px', backgroundColor: 'white', borderRadius: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 1001, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '12px', background: '#1a4a8e', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 'bold', fontSize: '14px' }}>Notifications</span>
+            <button onClick={() => setNotifications([])} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '11px', textDecoration: 'underline', cursor: 'pointer' }}>Clear All</button>
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1, padding: '10px' }}>
+            {notifications.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#999', fontSize: '12px', padding: '20px' }}>No new notifications</p>
+            ) : (
+              notifications.map(n => (
+                <div key={n.id} style={{ padding: '10px', borderBottom: '1px solid #eee', position: 'relative', borderLeft: `4px solid ${n.type === 'success' ? '#2ecc71' : n.type === 'warning' ? '#f39c12' : '#3498db'}` }}>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333' }}>{n.message}</div>
+                  <div style={{ fontSize: '10px', color: '#999', marginTop: '4px' }}>{n.time}</div>
+                </div>
+              ))
+            )}
+          </div>
+          <button onClick={() => setShowNotifPanel(false)} style={{ padding: '10px', border: 'none', background: '#f8f9fa', color: '#666', fontSize: '12px', cursor: 'pointer' }}>Close</button>
+        </div>
+      )}
+
+      <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center', color:'white', position: 'relative' }}>
+        
+        {/* NOTIFICATION BELL ICON */}
+        <div 
+          onClick={() => setShowNotifPanel(!showNotifPanel)}
+          style={{ position: 'absolute', top: '15px', right: '20px', cursor: 'pointer', padding: '5px' }}
+        >
+          <span style={{ fontSize: '20px' }}>🔔</span>
+          {notifications.length > 0 && (
+            <span style={{ position: 'absolute', top: '0', right: '0', background: 'red', color: 'white', fontSize: '9px', borderRadius: '50%', width: '15px', height: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+              {notifications.length}
+            </span>
+          )}
+        </div>
+
         <h3 style={{margin:0}}>DAR-E-ARQAM (ALI CAMPUS)</h3>
         {userRole === 'staff' && <div style={{background:'rgba(255,255,255,0.2)', padding:'5px', borderRadius:'8px', fontSize:'12px', marginTop:'5px'}}>Teacher: {staffName}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop:'15px', background:'#f0f2f5', padding:'10px', borderRadius:'15px' }}>
@@ -339,7 +405,7 @@ function App() {
             setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
             setView('teacher_attendance_view'); 
           }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
-          <button onClick={() => setIsLoggedIn(false)} style={getNavStyle('logout')}>🚪 Out</button>
+          <button onClick={() => { setIsLoggedIn(false); setNotifications([]); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
 
@@ -441,6 +507,7 @@ function App() {
                   name: staffName, fromDate: leaveFrom, toDate: leaveTo, reason: leaveReason, status: "pending", appliedAt: serverTimestamp()
                 });
                 alert("Leave application submitted!");
+                addNotification("Leave request submitted successfully", "success");
                 setLeaveFrom(''); setLeaveTo(''); setLeaveReason(''); setView('dashboard');
               } catch(e) { alert("Submission failed"); }
             }} style={actionBtn}>Submit Application</button>
@@ -561,7 +628,13 @@ function App() {
               if(!name || !rollNo) return alert("Fill Name and Roll Number");
               const d = { student_name:name, roll_number:rollNo, parent_whatsapp:whatsapp, class:selectedClass, base_fee:Number(baseFee), arrears:Number(arrears) };
               try {
-                editingStudent ? await updateDoc(doc(db,"ali_campus_records",editingStudent.id), d) : await addDoc(collection(db,"ali_campus_records"), {...d, created_at:serverTimestamp()});
+                if (editingStudent) {
+                   await updateDoc(doc(db,"ali_campus_records",editingStudent.id), d);
+                   addNotification(`Updated student: ${name}`, "success");
+                } else {
+                   await addDoc(collection(db,"ali_campus_records"), {...d, created_at:serverTimestamp()});
+                   addNotification(`New admission: ${name} (Roll: ${rollNo})`, "success");
+                }
                 alert("Saved!"); setView('dashboard'); clearInputs();
               } catch (e) { alert("Error Saving Data"); }
             }} style={actionBtn}>Save Student</button>
@@ -609,7 +682,7 @@ function App() {
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>Class: {r.class} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}</div>
                 <div style={{marginTop:'10px'}}>
                   <button onClick={()=>{setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp); setBaseFee(r.base_fee); setArrears(r.arrears); setView('add');}} style={{background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', marginRight:'10px'}}>Edit</button>
-                  <button onClick={async ()=>{if(window.confirm("Delete?")){await deleteDoc(doc(db,"ali_campus_records",r.id)); setView('dashboard');}}} style={{background:'#e74c3c', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px'}}>Delete</button>
+                  <button onClick={async ()=>{if(window.confirm("Delete?")){await deleteDoc(doc(db,"ali_campus_records",r.id)); addNotification(`Deleted student: ${r.student_name}`, "warning"); setView('dashboard');}}} style={{background:'#e74c3c', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px'}}>Delete</button>
                 </div>
               </div>
             ))}
@@ -647,7 +720,9 @@ function App() {
 
             <button onClick={async ()=>{
               await addDoc(collection(db,"daily_attendance"), {class:filterClass, date:today, attendance_data:attendance, timestamp:serverTimestamp()});
-              alert("Attendance Saved!"); setView('dashboard'); setAttendance({}); setSearchQuery('');
+              alert("Attendance Saved!"); 
+              addNotification(`Attendance submitted for ${filterClass}`, "success");
+              setView('dashboard'); setAttendance({}); setSearchQuery('');
             }} style={actionBtn}>Submit Attendance</button>
           </div>
         )}
@@ -731,12 +806,14 @@ function App() {
                       <button onClick={async () => {
                         await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'approved' });
                         alert("Approved!");
+                        addNotification(`Approved leave for ${l.name}`, "success");
                         setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'approved'} : item));
                         fetchStats();
                       }} style={{flex:1, background:'#2ecc71', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>✅ Approve</button>
                       <button onClick={async () => {
                         await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'rejected' });
                         alert("Rejected!");
+                        addNotification(`Rejected leave for ${l.name}`, "warning");
                         setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'rejected'} : item));
                         fetchStats();
                       }} style={{flex:1, background:'#e74c3c', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>❌ Reject</button>
@@ -793,6 +870,7 @@ function App() {
                 });
                 setMonthlyData(Object.entries(summary).map(([k, v]) => [JSON.parse(k), v]));
                 setView('monthly_report');
+                addNotification(`Generated ${filterClass} report for ${selectedMonth}`, "info");
               } else {
                 setRecords(recSnap.docs.map(d => ({ id: d.id, ...d.data(), class: filterClass })));
                 setView(view==='sel_view'?'view':'attendance');
@@ -812,13 +890,25 @@ function App() {
               <button onClick={async ()=>{
                 await addDoc(collection(db, "staff_records"), {name:sName, role:sRole, salary:sSalary, password:sPass});
                 alert("Staff Added");
+                addNotification(`Staff added: ${sName}`, "success");
                 const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d => ({ id: d.id, ...d.data() })));
                 setSName(''); setSRole(''); setSSalary(''); setSPass('');
               }} style={actionBtn}>Add Staff</button>
             </div>
             {staffRecords.map(s => (
               <div key={s.id} style={cardStyle}>
-                <b>{s.name}</b> ({s.role}) - PWD: {s.password}
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                   <b>{s.name}</b>
+                   <button onClick={async ()=>{
+                     if(window.confirm("Remove staff?")) {
+                       await deleteDoc(doc(db, "staff_records", s.id));
+                       addNotification(`Removed staff member: ${s.name}`, "warning");
+                       const snap = await getDocs(query(collection(db, "staff_records"))); 
+                       setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                     }
+                   }} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button>
+                </div>
+                <div style={{fontSize:'12px', color:'#666'}}>Role: {s.role} | PWD: {s.password}</div>
               </div>
             ))}
           </div>
