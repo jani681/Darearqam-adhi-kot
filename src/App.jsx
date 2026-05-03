@@ -246,7 +246,9 @@ function App() {
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
               <h3 style={{margin:0}}>Attendance History</h3>
-              <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+              {userRole === 'admin' && (
+                <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+              )}
             </div>
             {history.map(h => (
               <div key={h.id} style={cardStyle}>
@@ -261,7 +263,9 @@ function App() {
           <div style={cardStyle}>
              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
                <h4 style={{margin:0}}>{filterClass} Report</h4>
-               <button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+               {userRole === 'admin' && (
+                 <button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+               )}
              </div>
              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
                <thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead>
@@ -307,6 +311,29 @@ function App() {
                 setView(view==='sel_view'?'view':'attendance');
               }
             }} style={actionBtn}>Proceed</button>
+          </div>
+        )}
+
+        {view === 'staff_list' && (
+          <div>
+            <div style={cardStyle}>
+              <h3>Add New Staff</h3>
+              <input placeholder="Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle}/>
+              <input placeholder="Role" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle}/>
+              <input placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle}/>
+              <input placeholder="Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle}/>
+              <button onClick={async ()=>{
+                await addDoc(collection(db, "staff_records"), {name:sName, role:sRole, salary:sSalary, password:sPass});
+                alert("Staff Added");
+                const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d => ({ id: d.id, ...d.data() })));
+                setSName(''); setSRole(''); setSSalary(''); setSPass('');
+              }} style={actionBtn}>Add Staff</button>
+            </div>
+            {staffRecords.map(s => (
+              <div key={s.id} style={cardStyle}>
+                <b>{s.name}</b> ({s.role}) - PWD: {s.password}
+              </div>
+            ))}
           </div>
         )}
       </div>
