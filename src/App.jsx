@@ -63,7 +63,8 @@ function App() {
     totalStudents: 0,
     totalStaff: 0,
     todayStudentAttendance: 0,
-    todayTeacherAttendance: 0
+    todayTeacherAttendance: 0,
+    pendingLeaves: 0
   });
 
   const getTeacherStats = (attendanceList, leaveList) => {
@@ -151,6 +152,7 @@ function App() {
         const staffSnap = await getDocs(collection(db, "staff_records"));
         const todayStudAtt = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
         const todayTeachAtt = await getDocs(query(collection(db, "teacher_attendance"), where("date", "==", today)));
+        const pendingLeavesSnap = await getDocs(query(collection(db, "teacher_leaves"), where("status", "==", "pending")));
         
         let studentAttendanceCount = 0;
         todayStudAtt.docs.forEach(doc => {
@@ -164,7 +166,8 @@ function App() {
           totalStudents: snap.size,
           totalStaff: staffSnap.size,
           todayStudentAttendance: studentAttendanceCount,
-          todayTeacherAttendance: todayTeachAtt.size
+          todayTeacherAttendance: todayTeachAtt.size,
+          pendingLeaves: pendingLeavesSnap.size
         });
       } catch (err) {
         console.error("Analytics fetch failed", err);
@@ -219,7 +222,7 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
         
-        {/* STEP 9: SAFE READ-ONLY ADMIN ANALYTICS DASHBOARD */}
+        {/* SAFE READ-ONLY ADMIN ANALYTICS DASHBOARD + LEAVE QUICK VIEW */}
         {userRole === 'admin' && view === 'dashboard' && (
           <div style={{...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12'}}>
             <h4 style={{marginTop: 0, marginBottom: '10px', display: 'flex', alignItems: 'center'}}>📊 Admin Overview Panel</h4>
@@ -240,9 +243,15 @@ function App() {
                 <small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small>
                 <b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b>
               </div>
-              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2'}}>
-                <small style={{display: 'block', opacity: 0.8}}>Total Campus Classes</small>
-                <b style={{fontSize: '18px'}}>{CLASSES.length}</b>
+              <div onClick={async () => {
+                 const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
+                 setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
+                 const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
+                 setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
+                 setView('teacher_attendance_view');
+              }} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer'}}>
+                <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small>
+                <b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
               </div>
             </div>
           </div>
@@ -562,11 +571,13 @@ function App() {
                         await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'approved' });
                         alert("Approved!");
                         setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'approved'} : item));
+                        fetchStats();
                       }} style={{flex:1, background:'#2ecc71', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>✅ Approve</button>
                       <button onClick={async () => {
                         await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'rejected' });
                         alert("Rejected!");
                         setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'rejected'} : item));
+                        fetchStats();
                       }} style={{flex:1, background:'#e74c3c', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>❌ Reject</button>
                    </div>
                  )}
