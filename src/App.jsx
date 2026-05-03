@@ -43,7 +43,7 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // --- PDF EXPORT LOGIC (ADDED) ---
+  // --- PDF EXPORT LOGIC ---
   const downloadPDF = (title, headers, bodyData, fileName) => {
     const doc = new jsPDF();
     doc.text("Dar-e-Arqam (Ali Campus)", 14, 15);
@@ -121,7 +121,6 @@ function App() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
-      {/* Header & Nav */}
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center', color:'white' }}>
         <h3 style={{margin:0}}>DAR-E-ARQAM (ALI CAMPUS)</h3>
         {userRole === 'staff' && <div style={{background:'rgba(255,255,255,0.2)', padding:'5px', borderRadius:'8px', fontSize:'12px', marginTop:'5px'}}>Teacher: {staffName}</div>}
@@ -268,12 +267,12 @@ function App() {
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
             {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
             <button onClick={async ()=> {
-              if(view==='sel_report') {
-                const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
-                const recSnap = await getDocs(qRec);
-                const studentMap = {};
-                recSnap.docs.forEach(d => { studentMap[d.id] = d.data().student_name; });
+              const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
+              const recSnap = await getDocs(qRec);
+              const studentMap = {};
+              recSnap.docs.forEach(d => { studentMap[d.id] = d.data().student_name; });
 
+              if(view==='sel_report') {
                 const q = query(collection(db, "daily_attendance"), where("class", "==", filterClass));
                 const snap = await getDocs(q);
                 const summary = {};
@@ -290,9 +289,7 @@ function App() {
                 setMonthlyData(Object.entries(summary));
                 setView('monthly_report');
               } else {
-                const q = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
-                const snap = await getDocs(q);
-                setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                setRecords(recSnap.docs.map(d => ({ id: d.id, ...d.data() })));
                 setView(view==='sel_view'?'view':'attendance');
               }
             }} style={actionBtn}>Proceed</button>
