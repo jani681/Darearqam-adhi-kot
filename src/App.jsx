@@ -104,7 +104,9 @@ function App() {
       const q = query(collection(db, "staff_records"), where("password", "==", passInput));
       const snap = await getDocs(q);
       if (!snap.empty) { 
-        setStaffName(snap.docs[0].data().name); 
+        const teacherData = snap.docs[0].data();
+        setStaffName(teacherData.name); 
+        setMyProfileData(teacherData); // Optimization: Store profile data immediately on login
         setUserRole('staff'); 
         setIsLoggedIn(true); 
       } else alert("Wrong Password!");
@@ -164,15 +166,20 @@ function App() {
             <button 
               onClick={async () => {
                 try {
-                  const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
-                  const staffSnap = await getDocs(qStaff);
-                  if(!staffSnap.empty) {
-                    setMyProfileData(staffSnap.docs[0].data());
-                  } else {
-                    setMyProfileData({ name: staffName, role: "Teacher", salary: "N/A" });
+                  // Step 4 Optimization: Avoid re-fetching staff record if already in state
+                  if (!myProfileData && staffName) {
+                    const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
+                    const staffSnap = await getDocs(qStaff);
+                    if(!staffSnap.empty) {
+                      setMyProfileData(staffSnap.docs[0].data());
+                    } else {
+                      setMyProfileData({ name: staffName, role: "Teacher", salary: "N/A" });
+                    }
+                  } else if (!staffName) {
+                    return alert("Profile identity missing. Please re-login.");
                   }
-                  
-                  // Query simplified to avoid Index requirement errors
+
+                  // Step 4: Ensure attendance fetching handles potential index errors or empty results
                   const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName));
                   const attSnap = await getDocs(qAtt);
                   const sortedAtt = attSnap.docs
@@ -180,10 +187,12 @@ function App() {
                     .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                     
                   setMyAttendanceRecords(sortedAtt);
+                  
+                  // Step 4: Ensure state updates are conceptually complete before switching view
                   setView('teacher_profile_view');
                 } catch (err) {
-                  alert("Error fetching profile.");
-                  console.error(err);
+                  alert("Error loading profile. Check internet connection.");
+                  console.error("Profile Fetch Error: ", err);
                 }
               }}
               style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}
