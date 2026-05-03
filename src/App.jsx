@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc } from "firebase/firestore"; 
+import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc, writeBatch } from "firebase/firestore"; 
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -65,7 +65,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [classFilter, setClassFilter] = useState('All');
 
-  // NEW NOTIFICATION STATES
+  // NOTIFICATION STATES
   const [notifications, setNotifications] = useState([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
 
@@ -77,6 +77,7 @@ function App() {
     pendingLeaves: 0
   });
 
+  const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
   // ===== NOTIFICATION HELPER =====
@@ -87,7 +88,87 @@ function App() {
       type: type,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
-    setNotifications(prev => [newNotif, ...prev].slice(0, 20)); // Keep last 20
+    setNotifications(prev => [newNotif, ...prev].slice(0, 20));
+  };
+
+  // ===== BACKUP & RESTORE LOGIC =====
+  const handleDownloadBackup = async () => {
+    try {
+      addNotification("Preparing backup...", "info");
+      const studentsSnap = await getDocs(collection(db, "ali_campus_records"));
+      const staffSnap = await getDocs(collection(db, "staff_records"));
+      const dailyAttSnap = await getDocs(collection(db, "daily_attendance"));
+      const teacherAttSnap = await getDocs(collection(db, "teacher_attendance"));
+
+      const backupData = {
+        students: studentsSnap.docs.map(doc => doc.data()),
+        staff: staffSnap.docs.map(doc => doc.data()),
+        attendance: dailyAttSnap.docs.map(doc => doc.data()),
+        teacher_attendance: teacherAttSnap.docs.map(doc => doc.data()),
+        exportDate: new Date().toISOString()
+      };
+
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `ali_campus_backup_${today}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      addNotification("Backup downloaded successfully", "success");
+    } catch (e) {
+      console.error(e);
+      addNotification("Backup failed!", "warning");
+    }
+  };
+
+  const handleRestoreBackup = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        
+        // Simple validation
+        if (!data.students || !data.staff || !data.attendance) {
+          throw new Error("Invalid backup file format");
+        }
+
+        if (window.confirm(`Found ${data.students.length} students and ${data.staff.length} staff records. This will ADD them to the database. Continue?`)) {
+          addNotification("Restoring data...", "info");
+          
+          // Restore Students
+          for (const student of data.students) {
+            await addDoc(collection(db, "ali_campus_records"), student);
+          }
+          // Restore Staff
+          for (const s of data.staff) {
+            await addDoc(collection(db, "staff_records"), s);
+          }
+          // Restore Daily Attendance
+          for (const att of data.attendance) {
+            await addDoc(collection(db, "daily_attendance"), att);
+          }
+          // Restore Teacher Attendance
+          if (data.teacher_attendance) {
+            for (const tAtt of data.teacher_attendance) {
+              await addDoc(collection(db, "teacher_attendance"), tAtt);
+            }
+          }
+
+          addNotification("Data restored successfully", "success");
+          fetchStats();
+        }
+      } catch (err) {
+        alert("Restore failed: " + err.message);
+        addNotification("Restore failed!", "warning");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = null; // Reset file input
   };
 
   // ===== SMART FILTERING LOGIC =====
@@ -443,6 +524,27 @@ function App() {
                   <b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
                 </div>
               </div>
+            </div>
+
+            {/* BACKUP & RESTORE SECTION */}
+            <div style={{...cardStyle, borderLeft: '6px solid #9b59b6'}}>
+              <h4 style={{marginTop:0}}>🛡️ Data Protection</h4>
+              <button onClick={handleDownloadBackup} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#9b59b6'}}>Download Full Backup (JSON)</button>
+              
+              <input 
+                type="file" 
+                accept=".json" 
+                onChange={handleRestoreBackup} 
+                style={{display: 'none'}} 
+                ref={fileInputRef} 
+              />
+              <button 
+                onClick={() => fileInputRef.current.click()} 
+                style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#34495e'}}
+              >
+                Upload Backup & Restore
+              </button>
+              <p style={{fontSize: '10px', color: '#666', marginTop: '5px'}}>* Restore adds data without deleting current records.</p>
             </div>
 
             <div style={cardStyle}>
