@@ -69,6 +69,10 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
 
+  // TEACHER DIRECTORY STATES
+  const [teacherDirectory, setTeacherDirectory] = useState([]);
+  const [dirSearch, setDirSearch] = useState('');
+
   const [adminAnalytics, setAdminAnalytics] = useState({
     totalStudents: 0,
     totalStaff: 0,
@@ -530,6 +534,12 @@ function App() {
             setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
             setView('teacher_attendance_view'); 
           }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
+          {userRole === 'admin' && <button onClick={async () => { 
+            const s = await getDocs(collection(db, "staff_records"));
+            setTeacherDirectory(s.docs.map(d => ({id: d.id, ...d.data()})));
+            setDirSearch('');
+            setView('teacher_directory'); 
+          }} style={getNavStyle('teacher_directory')}>📇 Directory</button>}
           <button onClick={() => { setIsLoggedIn(false); setNotifications([]); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
@@ -598,6 +608,46 @@ function App() {
               <button onClick={handleExportTodayAttendance} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#7f8c8d'}}>Download Today Attendance CSV</button>
             </div>
           </>
+        )}
+
+        {/* TEACHER DIRECTORY VIEW */}
+        {view === 'teacher_directory' && (
+          <div>
+            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
+              <h3 style={{marginTop:0}}>📇 Teacher Directory</h3>
+              <input 
+                placeholder="Search Teacher Name..." 
+                value={dirSearch} 
+                onChange={(e) => setDirSearch(e.target.value)} 
+                style={{...inputStyle, marginBottom:0}} 
+              />
+            </div>
+            
+            {teacherDirectory
+              .filter(t => t.name?.toLowerCase().includes(dirSearch.toLowerCase()))
+              .map(t => (
+                <div key={t.id} style={cardStyle}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                    <div>
+                      <b style={{fontSize:'18px', color:'#1a4a8e'}}>{t.name}</b>
+                      <div style={{color:'#666', fontSize:'14px'}}>{t.role}</div>
+                      {t.whatsapp && <div style={{fontSize:'12px', color:'#999', marginTop:'5px'}}>📞 {t.whatsapp}</div>}
+                    </div>
+                    {t.whatsapp && (
+                      <a 
+                        href={`https://wa.me/${t.whatsapp}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        style={{textDecoration:'none', background:'#25D366', color:'white', padding:'8px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:'bold', display:'flex', alignItems:'center', gap:'5px'}}
+                      >
+                        <span>🟢</span> Chat
+                      </a>
+                    )}
+                  </div>
+                </div>
+            ))}
+            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#7f8c8d'}}>Back to Dashboard</button>
+          </div>
         )}
 
         {userRole === 'staff' && view === 'dashboard' && (
