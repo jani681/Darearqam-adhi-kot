@@ -490,4 +490,4 @@ const cardStyle = { background:'white', padding:'15px', borderRadius:'15px', box
 const inputStyle = { width:'100%', padding:'12px', margin:'8px 0', borderRadius:'10px', border:'1px solid #ddd', boxSizing:'border-box', fontSize:'14px' };
 const actionBtn = { width:'100%', padding:'15px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', fontSize:'16px' };
 
-export default App;```
+export default App;
