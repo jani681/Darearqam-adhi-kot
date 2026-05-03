@@ -218,7 +218,7 @@ function App() {
             ))}
             <button onClick={async ()=>{
               await addDoc(collection(db,"daily_attendance"), {class:filterClass, date:today, attendance_data:attendance, timestamp:serverTimestamp()});
-              alert("Attendance Saved!"); setView('dashboard');
+              alert("Attendance Saved!"); setView('dashboard'); setAttendance({});
             }} style={actionBtn}>Submit Attendance</button>
           </div>
         )}
@@ -267,6 +267,10 @@ function App() {
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
             {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
             <button onClick={async ()=> {
+              // Reset Data
+              setMonthlyData([]);
+              setRecords([]);
+              
               const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
               const recSnap = await getDocs(qRec);
               const studentMap = {};
