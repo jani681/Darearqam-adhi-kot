@@ -404,6 +404,29 @@ function App() {
     backgroundColor: view === t ? '#f39c12' : '#ffffff', color: '#1a4a8e', boxShadow: '0 4px 0 #bdc3c7', cursor:'pointer'
   });
 
+  // --- AUTO ABSENT LOGIC (READ ONLY) ---
+  const getUnifiedTeacherAttendanceList = () => {
+    const selectedDate = tAttSearchDate || today;
+    
+    // 1. Get filtered present list for selected date
+    const presentList = teacherAttendanceList.filter(t => t.date === selectedDate);
+    
+    // 2. Identify absentees from staffRecords
+    const presentNames = new Set(presentList.map(p => p.name));
+    const absentList = staffRecords
+      .filter(staff => !presentNames.has(staff.name))
+      .map(staff => ({
+        id: `absent-${staff.name}`,
+        name: staff.name,
+        date: selectedDate,
+        time: null, // Indicates absence
+        distance: "N/A",
+        status: "Absent (Auto Detected)"
+      }));
+    
+    return [...presentList, ...absentList];
+  };
+
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', background:'white', padding:'5px' }} />
@@ -499,6 +522,8 @@ function App() {
           <button onClick={async () => { const h = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp","desc"))); setHistory(h.docs.map(d=>({id:d.id, ...d.data()}))); setView('history'); }} style={getNavStyle('history')}>📜 Hist</button>
           {userRole === 'admin' && <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>}
           {userRole === 'admin' && <button onClick={async () => { 
+            const sRec = await getDocs(collection(db, "staff_records"));
+            setStaffRecords(sRec.docs.map(d => ({id: d.id, ...d.data()})));
             const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
             setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
             const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
@@ -533,6 +558,8 @@ function App() {
                   <b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b>
                 </div>
                 <div onClick={async () => {
+                   const sRec = await getDocs(collection(db, "staff_records"));
+                   setStaffRecords(sRec.docs.map(d => ({id: d.id, ...d.data()})));
                    const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
                    setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
                    const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
@@ -861,35 +888,52 @@ function App() {
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
               <h3 style={{margin:0}}>Teacher Attendance</h3>
-              <button onClick={() => downloadPDF("Teacher Attendance Report", ["Teacher Name", "Date", "Time", "Distance"], teacherAttendanceList.filter(t => tAttSearchDate === '' || t.date === tAttSearchDate).map(t => [t.name, t.date, t.time, t.distance]), "Teacher_Attendance_Report")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+              <button onClick={() => {
+                const list = getUnifiedTeacherAttendanceList();
+                downloadPDF(
+                  "Teacher Attendance & Absence Report", 
+                  ["Teacher Name", "Date", "Status/Time", "Distance"], 
+                  list.map(t => [t.name, t.date, t.time || "❌ Absent (Auto)", t.distance]), 
+                  "Teacher_Attendance_Report"
+                );
+              }} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
             </div>
             <input type="date" value={tAttSearchDate} onChange={(e)=>setTAttSearchDate(e.target.value)} style={inputStyle} placeholder="Filter by Date" />
-            {teacherAttendanceList.filter(t => tAttSearchDate === '' || t.date === tAttSearchDate).map(t => (
-              <div key={t.id} style={cardStyle}>
+            
+            {/* Unified Display List: Present + Auto-Absent */}
+            {getUnifiedTeacherAttendanceList().map(t => (
+              <div key={t.id} style={{...cardStyle, borderLeft: t.time ? '6px solid #2ecc71' : '6px solid #e74c3c'}}>
                 <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}>
                   <span>{t.name}</span>
-                  <span style={{color:'#1a4a8e'}}>{t.time}</span>
+                  <span style={{color: t.time ? '#1a4a8e' : '#e74c3c'}}>
+                    {t.time ? t.time : "❌ Absent (Auto Detected)"}
+                  </span>
                 </div>
-                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📅 {t.date} | 📍 Dist: {t.distance}</div>
-                <button 
-                  onClick={async () => {
-                    try {
-                      const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
-                      const staffSnap = await getDocs(qStaff);
-                      const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
-                      const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name));
-                      const attSnap = await getDocs(qAtt);
-                      const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-                      setSelectedTeacherProfile(staffData);
-                      setTeacherProfileRecords(sortedAtt);
-                      setMyProfileData(null); 
-                      setView('teacher_profile_view');
-                    } catch (err) { alert("Error loading profile."); }
-                  }} 
-                  style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}
-                >
-                  View Profile
-                </button>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
+                   📅 {t.date} | 📍 Dist: {t.distance}
+                </div>
+                
+                {t.time && (
+                  <button 
+                    onClick={async () => {
+                      try {
+                        const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
+                        const staffSnap = await getDocs(qStaff);
+                        const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
+                        const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name));
+                        const attSnap = await getDocs(qAtt);
+                        const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                        setSelectedTeacherProfile(staffData);
+                        setTeacherProfileRecords(sortedAtt);
+                        setMyProfileData(null); 
+                        setView('teacher_profile_view');
+                      } catch (err) { alert("Error loading profile."); }
+                    }} 
+                    style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}
+                  >
+                    View Profile
+                  </button>
+                )}
               </div>
             ))}
 
