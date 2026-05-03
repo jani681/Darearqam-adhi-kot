@@ -58,6 +58,14 @@ function App() {
   // ===== NEW CODE START =====
   const [myLeaveRecords, setMyLeaveRecords] = useState([]);
 
+  // --- ADMIN ANALYTICS STATE ---
+  const [adminAnalytics, setAdminAnalytics] = useState({
+    totalStudents: 0,
+    totalStaff: 0,
+    todayStudentAttendance: 0,
+    todayTeacherAttendance: 0
+  });
+
   const getTeacherStats = (attendanceList, leaveList) => {
     const totalPresent = attendanceList.length;
     const totalLeave = leaveList.filter(l => l.status === "approved").length;
@@ -136,6 +144,32 @@ function App() {
     const stats = {};
     snap.docs.forEach(d => { const cls = d.data().class; stats[cls] = (stats[cls] || 0) + 1; });
     setClassStats(stats);
+    
+    // FETCH ADMIN ANALYTICS ONLY FOR ADMIN
+    if (userRole === 'admin') {
+      try {
+        const staffSnap = await getDocs(collection(db, "staff_records"));
+        const todayStudAtt = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
+        const todayTeachAtt = await getDocs(query(collection(db, "teacher_attendance"), where("date", "==", today)));
+        
+        let studentAttendanceCount = 0;
+        todayStudAtt.docs.forEach(doc => {
+          const data = doc.data().attendance_data;
+          if (data) {
+            studentAttendanceCount += Object.values(data).filter(v => v === 'P').length;
+          }
+        });
+
+        setAdminAnalytics({
+          totalStudents: snap.size,
+          totalStaff: staffSnap.size,
+          todayStudentAttendance: studentAttendanceCount,
+          todayTeacherAttendance: todayTeachAtt.size
+        });
+      } catch (err) {
+        console.error("Analytics fetch failed", err);
+      }
+    }
   };
 
   useEffect(() => { if (isLoggedIn) fetchStats(); }, [isLoggedIn, view]);
@@ -184,6 +218,36 @@ function App() {
       </div>
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
+        
+        {/* STEP 9: SAFE READ-ONLY ADMIN ANALYTICS DASHBOARD */}
+        {userRole === 'admin' && view === 'dashboard' && (
+          <div style={{...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12'}}>
+            <h4 style={{marginTop: 0, marginBottom: '10px', display: 'flex', alignItems: 'center'}}>📊 Admin Overview Panel</h4>
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
+                <small style={{display: 'block', opacity: 0.8}}>Total Students</small>
+                <b style={{fontSize: '18px'}}>{adminAnalytics.totalStudents}</b>
+              </div>
+              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
+                <small style={{display: 'block', opacity: 0.8}}>Total Staff</small>
+                <b style={{fontSize: '18px'}}>{adminAnalytics.totalStaff}</b>
+              </div>
+              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
+                <small style={{display: 'block', opacity: 0.8}}>Today Stud. Present</small>
+                <b style={{fontSize: '18px'}}>{adminAnalytics.todayStudentAttendance}</b>
+              </div>
+              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
+                <small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small>
+                <b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b>
+              </div>
+              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2'}}>
+                <small style={{display: 'block', opacity: 0.8}}>Total Campus Classes</small>
+                <b style={{fontSize: '18px'}}>{CLASSES.length}</b>
+              </div>
+            </div>
+          </div>
+        )}
+
         {userRole === 'staff' && view === 'dashboard' && (
           <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
             <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
