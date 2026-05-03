@@ -43,8 +43,8 @@ function App() {
   const [teacherAttendanceList, setTeacherAttendanceList] = useState([]);
   const [tAttSearchDate, setTAttSearchDate] = useState('');
 
-  // STATES FOR TEACHER PROFILE FEATURE
-  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  // --- NEW STATES FOR TEACHER PROFILE FEATURE ---
+  const [selectedTeacherProfile, setSelectedTeacherProfile] = useState(null);
   const [teacherProfileRecords, setTeacherProfileRecords] = useState([]);
 
   const today = new Date().toISOString().split('T')[0];
@@ -284,39 +284,62 @@ function App() {
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
                   📅 {t.date} | 📍 Dist: {t.distance}
                 </div>
-                <button onClick={async () => {
-                  const staffSnap = await getDocs(query(collection(db, "staff_records"), where("name", "==", t.name)));
-                  const staffData = staffSnap.empty ? { name: t.name, role: 'Staff' } : staffSnap.docs[0].data();
-                  const attSnap = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", t.name), orderBy("timestamp", "desc")));
-                  setSelectedTeacher(staffData);
-                  setTeacherProfileRecords(attSnap.docs.map(d => d.data()));
-                  setView('teacher_profile_view');
-                }} style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>View Profile</button>
+                {/* --- NEW VIEW PROFILE BUTTON --- */}
+                <button 
+                  onClick={async () => {
+                    const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
+                    const staffSnap = await getDocs(qStaff);
+                    const role = !staffSnap.empty ? staffSnap.docs[0].data().role : "Staff";
+                    
+                    const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name), orderBy("timestamp", "desc"));
+                    const attSnap = await getDocs(qAtt);
+                    
+                    setSelectedTeacherProfile({ name: t.name, role: role });
+                    setTeacherProfileRecords(attSnap.docs.map(d => d.data()));
+                    setView('teacher_profile_view');
+                  }} 
+                  style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}
+                >
+                  View Profile
+                </button>
               </div>
             ))}
             {teacherAttendanceList.length === 0 && <p style={{textAlign:'center'}}>No records found.</p>}
           </div>
         )}
 
-        {/* NEW TEACHER PROFILE VIEW */}
-        {view === 'teacher_profile_view' && selectedTeacher && (
+        {/* --- NEW TEACHER PROFILE VIEW --- */}
+        {view === 'teacher_profile_view' && selectedTeacherProfile && (
           <div>
             <div style={cardStyle}>
-              <h3 style={{margin:0, color:'#1a4a8e'}}>{selectedTeacher.name}</h3>
-              <p style={{margin:'5px 0', fontWeight:'bold', color:'#666'}}>{selectedTeacher.role}</p>
-              <button onClick={() => downloadPDF("Teacher Profile Report", ["Name", "Date", "Time", "Distance"], teacherProfileRecords.map(r => [selectedTeacher.name, r.date, r.time, r.distance]), `${selectedTeacher.name}_Profile_Report`)} style={{marginTop:'10px', background:'#1a4a8e', color:'white', border:'none', padding:'10px', borderRadius:'8px', width:'100%', fontWeight:'bold', cursor:'pointer'}}>Download Profile PDF</button>
+              <h2 style={{margin:0, color:'#1a4a8e'}}>{selectedTeacherProfile.name}</h2>
+              <p style={{color:'#666', margin:'5px 0'}}>Role: {selectedTeacherProfile.role}</p>
+              
+              <button 
+                onClick={() => downloadPDF(
+                  "Teacher Profile Report", 
+                  ["Name", "Date", "Time", "Distance"], 
+                  teacherProfileRecords.map(r => [selectedTeacherProfile.name, r.date, r.time, r.distance]), 
+                  selectedTeacherProfile.name + "_Profile_Report"
+                )}
+                style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}
+              >
+                Download Profile PDF
+              </button>
             </div>
-            <h4 style={{margin:'20px 0 10px'}}>Attendance Records</h4>
-            {teacherProfileRecords.map((r, i) => (
-              <div key={i} style={cardStyle}>
+
+            <h4 style={{marginTop:'20px'}}>Attendance History</h4>
+            {teacherProfileRecords.map((r, idx) => (
+              <div key={idx} style={cardStyle}>
                 <div style={{display:'flex', justifyContent:'space-between'}}>
                   <b>{r.date}</b>
-                  <span style={{color:'#1a4a8e'}}>{r.time}</span>
+                  <span>{r.time}</span>
                 </div>
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📍 Distance: {r.distance}</div>
               </div>
             ))}
-            <button onClick={() => setView('teacher_attendance_view')} style={actionBtn}>Back to List</button>
+            
+            <button onClick={() => setView('teacher_attendance_view')} style={{...actionBtn, marginTop:'10px', background:'#7f8c8d'}}>Back to List</button>
           </div>
         )}
 
