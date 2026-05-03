@@ -247,7 +247,7 @@ function App() {
           </div>
         )}
 
-        {/* Report Section (MODIFIED WITH PDF BUTTON) */}
+        {/* Report Section */}
         {view === 'monthly_report' && (
           <div style={cardStyle}>
              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
@@ -269,15 +269,21 @@ function App() {
             {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
             <button onClick={async ()=> {
               if(view==='sel_report') {
+                const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
+                const recSnap = await getDocs(qRec);
+                const studentMap = {};
+                recSnap.docs.forEach(d => { studentMap[d.id] = d.data().student_name; });
+
                 const q = query(collection(db, "daily_attendance"), where("class", "==", filterClass));
                 const snap = await getDocs(q);
                 const summary = {};
                 snap.docs.forEach(d => {
                   const data = d.data();
                   if (data.date?.startsWith(selectedMonth)) {
-                    Object.entries(data.attendance_data).forEach(([std, stat]) => {
-                      if (!summary[std]) summary[std] = { p: 0, a: 0 };
-                      stat === 'P' ? summary[std].p++ : summary[std].a++;
+                    Object.entries(data.attendance_data).forEach(([id, stat]) => {
+                      const stdName = studentMap[id] || id; 
+                      if (!summary[stdName]) summary[stdName] = { p: 0, a: 0 };
+                      stat === 'P' ? summary[stdName].p++ : summary[stdName].a++;
                     });
                   }
                 });
@@ -293,7 +299,7 @@ function App() {
           </div>
         )}
 
-        {/* History Section (MODIFIED WITH PDF BUTTON) */}
+        {/* History Section */}
         {view === 'history' && (
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
