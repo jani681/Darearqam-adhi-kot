@@ -55,6 +55,17 @@ function App() {
   const [myLeaves, setMyLeaves] = useState([]);
   const [allLeaves, setAllLeaves] = useState([]);
 
+  // ===== NEW CODE START =====
+  const [myLeaveRecords, setMyLeaveRecords] = useState([]);
+
+  const getTeacherStats = (attendanceList, leaveList) => {
+    const totalPresent = attendanceList.length;
+    const totalLeave = leaveList.filter(l => l.status === "approved").length;
+    const totalAbsent = totalPresent + totalLeave; // Simple safe logic as requested
+    return { totalPresent, totalLeave, totalAbsent };
+  };
+  // ===== NEW CODE END =====
+
   const today = new Date().toISOString().split('T')[0];
 
   const downloadPDF = (title, headers, bodyData, fileName) => {
@@ -189,6 +200,11 @@ function App() {
                   const attSnap = await getDocs(qAtt);
                   const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                   setMyAttendanceRecords(sortedAtt);
+                  // ===== NEW CODE START =====
+                  const qLeaves = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
+                  const leaveSnap = await getDocs(qLeaves);
+                  setMyLeaveRecords(leaveSnap.docs.map(d => d.data()));
+                  // ===== NEW CODE END =====
                   setView('teacher_profile_view');
                 } catch (err) { alert("Error loading profile."); }
               }}
@@ -258,6 +274,15 @@ function App() {
               <p style={{color:'#666', margin:'5px 0'}}>Role: {(myProfileData || selectedTeacherProfile).role}</p>
               { (myProfileData || selectedTeacherProfile).salary && <p style={{color:'#666', margin:'5px 0'}}>Salary/Pay: {(myProfileData || selectedTeacherProfile).salary}</p> }
               
+              {/* ===== NEW CODE START ===== */}
+              <div style={{marginTop:'10px', padding:'10px', background:'#f8f9fa', borderRadius:'8px', fontSize:'13px'}}>
+                <strong>Attendance Summary:</strong><br/>
+                Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | 
+                Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave} | 
+                Absent: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalAbsent}
+              </div>
+              {/* ===== NEW CODE END ===== */}
+
               <button 
                 onClick={() => downloadPDF(
                   "Teacher Profile Report", 
@@ -397,6 +422,13 @@ function App() {
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
                   📅 {t.date} | 📍 Dist: {t.distance}
                 </div>
+                {/* ===== NEW CODE START ===== */}
+                <div style={{fontSize:'11px', color:'#2ecc71', marginTop:'4px'}}>
+                  Stats: P:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalPresent} | 
+                  L:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalLeave} | 
+                  A:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalAbsent}
+                </div>
+                {/* ===== NEW CODE END ===== */}
                 <button 
                   onClick={async () => {
                     try {
