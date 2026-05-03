@@ -45,7 +45,6 @@ function App() {
   const [selectedTeacherProfile, setSelectedTeacherProfile] = useState(null);
   const [teacherProfileRecords, setTeacherProfileRecords] = useState([]);
 
-  // Profile States for Teacher View
   const [myProfileData, setMyProfileData] = useState(null);
   const [myAttendanceRecords, setMyAttendanceRecords] = useState([]);
 
@@ -162,29 +161,29 @@ function App() {
           <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
             <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
             <p style={{fontSize:'10px', color:'#666', marginTop:'5px'}}>Range: 500m | Status: {status}</p>
-            
-            {/* FIXED VIEW MY PROFILE BUTTON */}
             <button 
               onClick={async () => {
-                if (!staffName) return alert("System error: staffName missing.");
                 try {
                   const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
                   const staffSnap = await getDocs(qStaff);
-                  let profileData = { name: staffName, role: "Teacher", salary: "N/A" };
                   if(!staffSnap.empty) {
-                    profileData = staffSnap.docs[0].data();
+                    setMyProfileData(staffSnap.docs[0].data());
+                  } else {
+                    setMyProfileData({ name: staffName, role: "Teacher", salary: "N/A" });
                   }
                   
-                  const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName), orderBy("timestamp", "desc"));
+                  // Query simplified to avoid Index requirement errors
+                  const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName));
                   const attSnap = await getDocs(qAtt);
-                  const attRecords = attSnap.docs.map(d => d.data());
-                  
-                  setMyProfileData(profileData);
-                  setMyAttendanceRecords(attRecords);
-                  setSelectedTeacherProfile(null); // Reset admin-selected profile
+                  const sortedAtt = attSnap.docs
+                    .map(d => d.data())
+                    .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                    
+                  setMyAttendanceRecords(sortedAtt);
                   setView('teacher_profile_view');
                 } catch (err) {
                   alert("Error fetching profile.");
+                  console.error(err);
                 }
               }}
               style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}
@@ -194,7 +193,6 @@ function App() {
           </div>
         )}
 
-        {/* FIXED PROFILE RENDERING LOGIC */}
         {view === 'teacher_profile_view' && (myProfileData || selectedTeacherProfile) && (
           <div>
             <div style={cardStyle}>
@@ -203,16 +201,12 @@ function App() {
               { (myProfileData || selectedTeacherProfile).salary && <p style={{color:'#666', margin:'5px 0'}}>Salary/Pay: {(myProfileData || selectedTeacherProfile).salary}</p> }
               
               <button 
-                onClick={() => {
-                  const currentName = (myProfileData || selectedTeacherProfile).name;
-                  const currentAtt = myProfileData ? myAttendanceRecords : teacherProfileRecords;
-                  downloadPDF(
-                    "Teacher Profile Report", 
-                    ["Name", "Date", "Time", "Distance"], 
-                    currentAtt.map(r => [currentName, r.date, r.time, r.distance]), 
-                    `${currentName}_Profile_Report`
-                  )
-                }}
+                onClick={() => downloadPDF(
+                  "Teacher Profile Report", 
+                  ["Name", "Date", "Time", "Distance"], 
+                  (userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map(r => [(myProfileData || selectedTeacherProfile).name, r.date, r.time, r.distance]), 
+                  (myProfileData || selectedTeacherProfile).name + "_Profile_Report"
+                )}
                 style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}
               >
                 Download My Profile PDF
@@ -220,7 +214,7 @@ function App() {
             </div>
 
             <h4 style={{marginTop:'20px'}}>Attendance History</h4>
-            {(myProfileData ? myAttendanceRecords : teacherProfileRecords).map((r, idx) => (
+            {(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map((r, idx) => (
               <div key={idx} style={cardStyle}>
                 <div style={{display:'flex', justifyContent:'space-between'}}>
                   <b>{r.date}</b>
@@ -347,16 +341,24 @@ function App() {
                 </div>
                 <button 
                   onClick={async () => {
-                    const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
-                    const staffSnap = await getDocs(qStaff);
-                    const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
-                    const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name), orderBy("timestamp", "desc"));
-                    const attSnap = await getDocs(qAtt);
-                    
-                    setSelectedTeacherProfile(staffData);
-                    setTeacherProfileRecords(attSnap.docs.map(d => d.data()));
-                    setMyProfileData(null); // Clear logged-in teacher data when admin views others
-                    setView('teacher_profile_view');
+                    try {
+                      const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
+                      const staffSnap = await getDocs(qStaff);
+                      const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
+                      
+                      const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name));
+                      const attSnap = await getDocs(qAtt);
+                      const sortedAtt = attSnap.docs
+                        .map(d => d.data())
+                        .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                        
+                      setSelectedTeacherProfile(staffData);
+                      setTeacherProfileRecords(sortedAtt);
+                      setMyProfileData(null); 
+                      setView('teacher_profile_view');
+                    } catch (err) {
+                      alert("Error loading profile.");
+                    }
                   }} 
                   style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}
                 >
