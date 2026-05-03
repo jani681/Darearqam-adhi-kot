@@ -43,6 +43,20 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
+  // --- PDF EXPORT LOGIC (ADDED) ---
+  const downloadPDF = (title, headers, bodyData, fileName) => {
+    const doc = new jsPDF();
+    doc.text("Dar-e-Arqam (Ali Campus)", 14, 15);
+    doc.text(title, 14, 25);
+    doc.autoTable({ 
+      head: [headers], 
+      body: bodyData, 
+      startY: 32,
+      headStyles: { fillColor: [26, 74, 142] }
+    });
+    doc.save(`${fileName}.pdf`);
+  };
+
   // --- LOCATION LOGIC ---
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371e3; 
@@ -233,15 +247,18 @@ function App() {
           </div>
         )}
 
-        {/* Report Section */}
+        {/* Report Section (MODIFIED WITH PDF BUTTON) */}
         {view === 'monthly_report' && (
           <div style={cardStyle}>
-             <h4>{filterClass} Report</h4>
+             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
+               <h4 style={{margin:0}}>{filterClass} Report</h4>
+               <button onClick={() => downloadPDF(`${filterClass} Monthly Report`, ["Name", "P", "A"], monthlyData.map(([n,s]) => [n, s.p, s.a]), `${filterClass}_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+             </div>
              <table style={{width:'100%', borderCollapse:'collapse'}}>
                <thead><tr style={{background:'#eee'}}><th style={{padding:'5px'}}>Name</th><th>P</th><th>A</th></tr></thead>
                <tbody>{monthlyData.map(([n,s])=>(<tr key={n} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'5px'}}>{n}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody>
              </table>
-             <button onClick={()=>setView('dashboard')} style={actionBtn}>Back Home</button>
+             <button onClick={()=>setView('dashboard')} style={{...actionBtn, marginTop:'15px'}}>Back Home</button>
           </div>
         )}
 
@@ -276,9 +293,13 @@ function App() {
           </div>
         )}
 
+        {/* History Section (MODIFIED WITH PDF BUTTON) */}
         {view === 'history' && (
           <div>
-            <h3>Attendance History</h3>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
+              <h3 style={{margin:0}}>Attendance History</h3>
+              <button onClick={() => downloadPDF("Attendance History Logs", ["Date", "Class"], history.map(h => [h.date, h.class]), "Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+            </div>
             {history.map(h => (
               <div key={h.id} style={cardStyle}>
                 <b>{h.date}</b> - {h.class}
