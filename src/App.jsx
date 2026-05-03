@@ -246,7 +246,7 @@ function App() {
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
               <h3 style={{margin:0}}>Attendance History</h3>
-              {userRole === 'admin' && (
+              {(userRole === 'admin' || userRole === 'staff') && (
                 <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
               )}
             </div>
