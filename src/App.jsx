@@ -61,7 +61,7 @@ function App() {
   const getTeacherStats = (attendanceList, leaveList) => {
     const totalPresent = attendanceList.length;
     const totalLeave = leaveList.filter(l => l.status === "approved").length;
-    const totalAbsent = totalPresent + totalLeave; // Simple safe logic as requested
+    const totalAbsent = 0; // Safe fallback as requested
     return { totalPresent, totalLeave, totalAbsent };
   };
   // ===== NEW CODE END =====
@@ -284,12 +284,37 @@ function App() {
               {/* ===== NEW CODE END ===== */}
 
               <button 
-                onClick={() => downloadPDF(
-                  "Teacher Profile Report", 
-                  ["Name", "Date", "Time", "Distance"], 
-                  (userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map(r => [(myProfileData || selectedTeacherProfile).name, r.date, r.time, r.distance]), 
-                  (myProfileData || selectedTeacherProfile).name + "_Profile_Report"
-                )}
+                // ===== NEW CODE START (IMPROVED PDF TRIGGER) =====
+                onClick={async () => {
+                   const currentStaffName = (myProfileData || selectedTeacherProfile).name;
+                   // Fetch latest leave applications count for report
+                   const qApproved = query(collection(db, "leave_applications"), where("name", "==", currentStaffName), where("status", "==", "approved"));
+                   const leaveSnap = await getDocs(qApproved);
+                   const approvedLeaveCount = leaveSnap.size;
+                   const presentCount = (userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).length;
+                   
+                   const reportBody = [
+                     ["--- SECTION 1: TEACHER INFO ---", "", "", ""],
+                     ["Name:", currentStaffName, "Role:", (myProfileData || selectedTeacherProfile).role],
+                     ["Salary/Pay:", (myProfileData || selectedTeacherProfile).salary || "N/A", "", ""],
+                     ["", "", "", ""],
+                     ["--- SECTION 2: ATTENDANCE SUMMARY ---", "", "", ""],
+                     ["Total Present:", presentCount, "Total Leave:", approvedLeaveCount],
+                     ["Total Absent:", 0, "", ""],
+                     ["", "", "", ""],
+                     ["--- SECTION 3: ATTENDANCE DETAILS ---", "", "", ""],
+                     ["Name", "Date", "Time", "Distance"],
+                     ...(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map(r => [currentStaffName, r.date, r.time, r.distance])
+                   ];
+
+                   downloadPDF(
+                     "Teacher Professional Report", 
+                     ["Field", "Value", "Field", "Value"], 
+                     reportBody, 
+                     `${currentStaffName}_Report`
+                   );
+                }}
+                // ===== NEW CODE END =====
                 style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}
               >
                 Download My Profile PDF
