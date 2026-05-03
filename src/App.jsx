@@ -22,7 +22,6 @@ function App() {
   const [status, setStatus] = useState('Online');
   const [classStats, setClassStats] = useState({});
   
-  // Student Input States
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -31,7 +30,6 @@ function App() {
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
   const [editingStudent, setEditingStudent] = useState(null);
 
-  // Staff States
   const [staffRecords, setStaffRecords] = useState([]);
   const [sName, setSName] = useState('');
   const [sRole, setSRole] = useState('');
@@ -43,21 +41,42 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // --- PDF EXPORT LOGIC ---
+  // --- IMPROVED PDF LOGIC ---
   const downloadPDF = (title, headers, bodyData, fileName) => {
     const doc = new jsPDF();
-    doc.text("Dar-e-Arqam (Ali Campus)", 14, 15);
-    doc.text(title, 14, 25);
+    
+    // Header
+    doc.setFillColor(26, 74, 142);
+    doc.rect(0, 0, 210, 30, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.text("DAR-E-ARQAM (ALI CAMPUS)", 105, 15, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text(title, 105, 25, { align: 'center' });
+
+    // Table
     doc.autoTable({ 
       head: [headers], 
       body: bodyData, 
-      startY: 32,
-      headStyles: { fillColor: [26, 74, 142] }
+      startY: 40,
+      headStyles: { fillColor: [26, 74, 142], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 10, cellPadding: 3 },
+      alternateRowStyles: { fillColor: [240, 240, 240] },
+      margin: { top: 40 }
     });
+
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        doc.text(`Generated on: ${new Date().toLocaleString()} | Page ${i} of ${pageCount}`, 14, 285);
+    }
+
     doc.save(`${fileName}.pdf`);
   };
 
-  // --- LOCATION LOGIC ---
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371e3; 
     const dLat = (lat2-lat1) * Math.PI/180;
@@ -78,7 +97,6 @@ function App() {
     }, () => alert("Enable Location Access!"));
   };
 
-  // --- CORE FUNCTIONS ---
   const handleLogin = async () => {
     if (passInput === ADMIN_PASSWORD) { setUserRole('admin'); setIsLoggedIn(true); return; }
     try {
@@ -223,39 +241,31 @@ function App() {
           </div>
         )}
 
-        {view === 'staff_list' && (
+        {/* History View with PDF Download */}
+        {view === 'history' && (
           <div>
-            <div style={cardStyle}>
-              <h4 style={{marginTop:0}}>Add New Staff</h4>
-              <input placeholder="Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle} />
-              <input placeholder="Role (Teacher/Admin)" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle} />
-              <input placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle} />
-              <input placeholder="Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle} />
-              <button onClick={async ()=>{
-                if(!sName || !sPass) return alert("Fill Name and Password");
-                await addDoc(collection(db,"staff_records"),{name:sName, role:sRole, salary:sSalary, password:sPass, created_at:serverTimestamp()});
-                alert("Staff Added"); setSName(''); setSPass(''); setSRole(''); setSSalary('');
-              }} style={actionBtn}>Add Staff</button>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
+              <h3 style={{margin:0}}>Attendance History</h3>
+              <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
             </div>
-            {staffRecords.map(s => (
-              <div key={s.id} style={cardStyle}>
-                <b>{s.name}</b> ({s.role})<br/>
-                <small>Salary: {s.salary} | Pass: {s.password}</small>
+            {history.map(h => (
+              <div key={h.id} style={cardStyle}>
+                <b>{h.date}</b> - {h.class}
               </div>
             ))}
           </div>
         )}
 
-        {/* Report Section */}
+        {/* Improved Monthly Report View */}
         {view === 'monthly_report' && (
           <div style={cardStyle}>
              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
                <h4 style={{margin:0}}>{filterClass} Report</h4>
-               <button onClick={() => downloadPDF(`${filterClass} Monthly Report`, ["Name", "P", "A"], monthlyData.map(([n,s]) => [n, s.p, s.a]), `${filterClass}_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+               <button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
              </div>
-             <table style={{width:'100%', borderCollapse:'collapse'}}>
-               <thead><tr style={{background:'#eee'}}><th style={{padding:'5px'}}>Name</th><th>P</th><th>A</th></tr></thead>
-               <tbody>{monthlyData.map(([n,s])=>(<tr key={n} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'5px'}}>{n}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody>
+             <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
+               <thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead>
+               <tbody>{monthlyData.map(([info, s])=>(<tr key={info.name} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'8px'}}>{info.roll} - {info.name}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody>
              </table>
              <button onClick={()=>setView('dashboard')} style={{...actionBtn, marginTop:'15px'}}>Back Home</button>
           </div>
@@ -267,14 +277,13 @@ function App() {
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
             {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
             <button onClick={async ()=> {
-              // Reset Data
-              setMonthlyData([]);
-              setRecords([]);
-              
+              setMonthlyData([]); setRecords([]);
               const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
               const recSnap = await getDocs(qRec);
               const studentMap = {};
-              recSnap.docs.forEach(d => { studentMap[d.id] = d.data().student_name; });
+              recSnap.docs.forEach(d => { 
+                  studentMap[d.id] = { name: d.data().student_name, roll: d.data().roll_number }; 
+              });
 
               if(view==='sel_report') {
                 const q = query(collection(db, "daily_attendance"), where("class", "==", filterClass));
@@ -284,34 +293,20 @@ function App() {
                   const data = d.data();
                   if (data.date?.startsWith(selectedMonth)) {
                     Object.entries(data.attendance_data).forEach(([id, stat]) => {
-                      const stdName = studentMap[id] || id; 
-                      if (!summary[stdName]) summary[stdName] = { p: 0, a: 0 };
-                      stat === 'P' ? summary[stdName].p++ : summary[stdName].a++;
+                      const stdInfo = studentMap[id] || { name: id, roll: 'N/A' };
+                      const key = JSON.stringify(stdInfo); 
+                      if (!summary[key]) summary[key] = { p: 0, a: 0 };
+                      stat === 'P' ? summary[key].p++ : summary[key].a++;
                     });
                   }
                 });
-                setMonthlyData(Object.entries(summary));
+                setMonthlyData(Object.entries(summary).map(([k, v]) => [JSON.parse(k), v]));
                 setView('monthly_report');
               } else {
                 setRecords(recSnap.docs.map(d => ({ id: d.id, ...d.data() })));
                 setView(view==='sel_view'?'view':'attendance');
               }
             }} style={actionBtn}>Proceed</button>
-          </div>
-        )}
-
-        {/* History Section */}
-        {view === 'history' && (
-          <div>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
-              <h3 style={{margin:0}}>Attendance History</h3>
-              <button onClick={() => downloadPDF("Attendance History Logs", ["Date", "Class"], history.map(h => [h.date, h.class]), "Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
-            </div>
-            {history.map(h => (
-              <div key={h.id} style={cardStyle}>
-                <b>{h.date}</b> - {h.class}
-              </div>
-            ))}
           </div>
         )}
       </div>
