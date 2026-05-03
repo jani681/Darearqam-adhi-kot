@@ -39,6 +39,10 @@ function App() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
+  // NEW STATES FOR TEACHER ATTENDANCE FEATURE
+  const [teacherAttendanceList, setTeacherAttendanceList] = useState([]);
+  const [tAttSearchDate, setTAttSearchDate] = useState('');
+
   const today = new Date().toISOString().split('T')[0];
 
   // --- IMPROVED PDF LOGIC ---
@@ -150,6 +154,7 @@ function App() {
           {userRole === 'admin' && <button onClick={async () => { const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d=>({id:d.id, ...d.data()}))); setView('staff_list'); }} style={getNavStyle('staff_list')}>👥 Staff</button>}
           <button onClick={async () => { const h = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp","desc"))); setHistory(h.docs.map(d=>({id:d.id, ...d.data()}))); setView('history'); }} style={getNavStyle('history')}>📜 Hist</button>
           {userRole === 'admin' && <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>}
+          {userRole === 'admin' && <button onClick={async () => { const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); setView('teacher_attendance_view'); }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
           <button onClick={() => setIsLoggedIn(false)} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
@@ -255,6 +260,26 @@ function App() {
                 <b>{h.date}</b> - {h.class}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* NEW TEACHER ATTENDANCE VIEW */}
+        {view === 'teacher_attendance_view' && (
+          <div>
+            <h3 style={{textAlign:'center', marginBottom:'15px'}}>Teacher Attendance Panel</h3>
+            <input type="date" value={tAttSearchDate} onChange={(e)=>setTAttSearchDate(e.target.value)} style={inputStyle} placeholder="Filter by Date" />
+            {teacherAttendanceList.filter(t => tAttSearchDate === '' || t.date === tAttSearchDate).map(t => (
+              <div key={t.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}>
+                  <span>{t.name}</span>
+                  <span style={{color:'#1a4a8e'}}>{t.time}</span>
+                </div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
+                  📅 {t.date} | 📍 Dist: {t.distance}
+                </div>
+              </div>
+            ))}
+            {teacherAttendanceList.length === 0 && <p style={{textAlign:'center'}}>No records found.</p>}
           </div>
         )}
 
