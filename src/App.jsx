@@ -48,6 +48,13 @@ function App() {
   const [myProfileData, setMyProfileData] = useState(null);
   const [myAttendanceRecords, setMyAttendanceRecords] = useState([]);
 
+  // --- NEW LEAVE STATES ---
+  const [leaveFrom, setLeaveFrom] = useState('');
+  const [leaveTo, setLeaveTo] = useState('');
+  const [leaveReason, setLeaveReason] = useState('');
+  const [myLeaves, setMyLeaves] = useState([]);
+  const [allLeaves, setAllLeaves] = useState([]);
+
   const today = new Date().toISOString().split('T')[0];
 
   const downloadPDF = (title, headers, bodyData, fileName) => {
@@ -106,7 +113,7 @@ function App() {
       if (!snap.empty) { 
         const teacherData = snap.docs[0].data();
         setStaffName(teacherData.name); 
-        setMyProfileData(teacherData); // Optimization: Store profile data immediately on login
+        setMyProfileData(teacherData); 
         setUserRole('staff'); 
         setIsLoggedIn(true); 
       } else alert("Wrong Password!");
@@ -153,7 +160,14 @@ function App() {
           {userRole === 'admin' && <button onClick={async () => { const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d=>({id:d.id, ...d.data()}))); setView('staff_list'); }} style={getNavStyle('staff_list')}>👥 Staff</button>}
           <button onClick={async () => { const h = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp","desc"))); setHistory(h.docs.map(d=>({id:d.id, ...d.data()}))); setView('history'); }} style={getNavStyle('history')}>📜 Hist</button>
           {userRole === 'admin' && <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>}
-          {userRole === 'admin' && <button onClick={async () => { const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); setView('teacher_attendance_view'); }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
+          {userRole === 'admin' && <button onClick={async () => { 
+            const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
+            setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
+            // Fetch Leaves for Admin
+            const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
+            setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
+            setView('teacher_attendance_view'); 
+          }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
           <button onClick={() => setIsLoggedIn(false)} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
@@ -166,39 +180,74 @@ function App() {
             <button 
               onClick={async () => {
                 try {
-                  // Step 4 Optimization: Avoid re-fetching staff record if already in state
                   if (!myProfileData && staffName) {
                     const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
                     const staffSnap = await getDocs(qStaff);
-                    if(!staffSnap.empty) {
-                      setMyProfileData(staffSnap.docs[0].data());
-                    } else {
-                      setMyProfileData({ name: staffName, role: "Teacher", salary: "N/A" });
-                    }
-                  } else if (!staffName) {
-                    return alert("Profile identity missing. Please re-login.");
+                    if(!staffSnap.empty) setMyProfileData(staffSnap.docs[0].data());
                   }
-
-                  // Step 4: Ensure attendance fetching handles potential index errors or empty results
                   const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName));
                   const attSnap = await getDocs(qAtt);
-                  const sortedAtt = attSnap.docs
-                    .map(d => d.data())
-                    .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-                    
+                  const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                   setMyAttendanceRecords(sortedAtt);
-                  
-                  // Step 4: Ensure state updates are conceptually complete before switching view
                   setView('teacher_profile_view');
-                } catch (err) {
-                  alert("Error loading profile. Check internet connection.");
-                  console.error("Profile Fetch Error: ", err);
-                }
+                } catch (err) { alert("Error loading profile."); }
               }}
               style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}
             >
               👤 View My Profile
             </button>
+
+            {/* --- NEW TEACHER LEAVE BUTTONS --- */}
+            <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+               <button onClick={() => setView('apply_leave')} style={{ flex:1, padding:'12px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📄 Apply Leave</button>
+               <button onClick={async () => {
+                 const qL = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
+                 const lSnap = await getDocs(qL);
+                 setMyLeaves(lSnap.docs.map(d => ({id: d.id, ...d.data()})));
+                 setView('my_leaves');
+               }} style={{ flex:1, padding:'12px', background:'#7f8c8d', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📜 My Leaves</button>
+            </div>
+          </div>
+        )}
+
+        {/* --- NEW APPLY LEAVE VIEW --- */}
+        {view === 'apply_leave' && (
+          <div style={cardStyle}>
+            <h3 style={{marginTop:0}}>Apply for Leave</h3>
+            <label style={{fontSize:'12px', color:'#666'}}>From Date</label>
+            <input type="date" value={leaveFrom} onChange={(e)=>setLeaveFrom(e.target.value)} style={inputStyle} />
+            <label style={{fontSize:'12px', color:'#666'}}>To Date</label>
+            <input type="date" value={leaveTo} onChange={(e)=>setLeaveTo(e.target.value)} style={inputStyle} />
+            <textarea placeholder="Reason for leave..." value={leaveReason} onChange={(e)=>setLeaveReason(e.target.value)} style={{...inputStyle, height:'80px', fontFamily:'inherit'}} />
+            <button onClick={async () => {
+              if(!leaveFrom || !leaveTo || !leaveReason) return alert("Fill all fields");
+              try {
+                await addDoc(collection(db, "teacher_leaves"), {
+                  name: staffName, fromDate: leaveFrom, toDate: leaveTo, reason: leaveReason, status: "pending", appliedAt: serverTimestamp()
+                });
+                alert("Leave application submitted!");
+                setLeaveFrom(''); setLeaveTo(''); setLeaveReason(''); setView('dashboard');
+              } catch(e) { alert("Submission failed"); }
+            }} style={actionBtn}>Submit Application</button>
+            <button onClick={()=>setView('dashboard')} style={{...actionBtn, background:'#7f8c8d', marginTop:'10px'}}>Cancel</button>
+          </div>
+        )}
+
+        {/* --- NEW MY LEAVES HISTORY VIEW --- */}
+        {view === 'my_leaves' && (
+          <div>
+            <h3>My Leave Requests</h3>
+            {myLeaves.length === 0 && <p style={{textAlign:'center', color:'#999'}}>No leaves applied yet.</p>}
+            {myLeaves.map(l => (
+              <div key={l.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}>
+                  <span>{l.fromDate} → {l.toDate}</span>
+                  <span style={{color: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12'}}>{l.status.toUpperCase()}</span>
+                </div>
+                <p style={{fontSize:'14px', margin:'10px 0', color:'#444'}}>{l.reason}</p>
+              </div>
+            ))}
+            <button onClick={()=>setView('dashboard')} style={actionBtn}>Back</button>
           </div>
         )}
 
@@ -354,25 +403,52 @@ function App() {
                       const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
                       const staffSnap = await getDocs(qStaff);
                       const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
-                      
                       const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name));
                       const attSnap = await getDocs(qAtt);
-                      const sortedAtt = attSnap.docs
-                        .map(d => d.data())
-                        .sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-                        
+                      const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                       setSelectedTeacherProfile(staffData);
                       setTeacherProfileRecords(sortedAtt);
                       setMyProfileData(null); 
                       setView('teacher_profile_view');
-                    } catch (err) {
-                      alert("Error loading profile.");
-                    }
+                    } catch (err) { alert("Error loading profile."); }
                   }} 
                   style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}
                 >
                   View Profile
                 </button>
+              </div>
+            ))}
+
+            {/* --- NEW ADMIN LEAVE SECTION --- */}
+            <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/>
+            <h3 style={{color:'#1a4a8e'}}>Teacher Leave Applications</h3>
+            {allLeaves.map(l => (
+              <div key={l.id} style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
+                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                    <div>
+                      <b style={{fontSize:'16px'}}>{l.name}</b>
+                      <div style={{fontSize:'12px', color:'#666'}}>{l.fromDate} → {l.toDate}</div>
+                    </div>
+                    <span style={{padding:'4px 8px', borderRadius:'5px', fontSize:'10px', fontWeight:'bold', background: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12', color:'white'}}>
+                      {l.status.toUpperCase()}
+                    </span>
+                 </div>
+                 <p style={{fontSize:'13px', color:'#333', background:'#f9f9f9', padding:'8px', borderRadius:'5px', margin:'10px 0'}}>{l.reason}</p>
+                 
+                 {l.status === 'pending' && (
+                   <div style={{display:'flex', gap:'10px'}}>
+                      <button onClick={async () => {
+                        await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'approved' });
+                        alert("Approved!");
+                        setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'approved'} : item));
+                      }} style={{flex:1, background:'#2ecc71', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>✅ Approve</button>
+                      <button onClick={async () => {
+                        await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'rejected' });
+                        alert("Rejected!");
+                        setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'rejected'} : item));
+                      }} style={{flex:1, background:'#e74c3c', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>❌ Reject</button>
+                   </div>
+                 )}
               </div>
             ))}
           </div>
