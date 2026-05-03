@@ -65,12 +65,12 @@ function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // ===== NEW PROFESSIONAL LEDGER LOGIC =====
+  // ===== PROFESSIONAL LEDGER GENERATOR =====
   const downloadProfessionalPDF = (title, headers, bodyData, summaryData = null) => {
     const doc = new jsPDF();
     
-    // School Header
-    doc.setFillColor(26, 74, 142); // Primary Blue
+    // School Header Branding
+    doc.setFillColor(26, 74, 142); 
     doc.rect(0, 0, 210, 45, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
@@ -78,24 +78,21 @@ function App() {
     doc.setFontSize(14);
     doc.text("ALI CAMPUS - ADHI KOT", 105, 28, { align: 'center' });
     
-    // Sub-header Bar
-    doc.setFillColor(243, 156, 18); // Accent Orange
+    doc.setFillColor(243, 156, 18); 
     doc.rect(0, 35, 210, 10, 'F');
     doc.setFontSize(11);
     doc.text(title.toUpperCase(), 105, 41, { align: 'center' });
 
     let startY = 55;
 
-    // Summary Section
     if (summaryData) {
       doc.setTextColor(50, 50, 50);
       doc.setFontSize(10);
-      let posX = 15;
       summaryData.forEach(item => {
         doc.setFont(undefined, 'bold');
-        doc.text(`${item.label}:`, posX, startY);
+        doc.text(`${item.label}:`, 15, startY);
         doc.setFont(undefined, 'normal');
-        doc.text(`${item.value}`, posX + 35, startY);
+        doc.text(`${item.value}`, 55, startY);
         startY += 7;
       });
       startY += 5;
@@ -116,7 +113,7 @@ function App() {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150);
-        doc.text(`Official Ledger | Generated on: ${new Date().toLocaleString()} | Page ${i} of ${pageCount}`, 105, 290, { align: 'center' });
+        doc.text(`Official Ledger | Generated: ${new Date().toLocaleString()} | Page ${i} of ${pageCount}`, 105, 290, { align: 'center' });
     }
     doc.save(`${title.replace(/\s+/g, '_')}.pdf`);
   };
@@ -129,13 +126,13 @@ function App() {
       const data = d.data();
       totalFee += Number(data.base_fee || 0);
       totalArrears += Number(data.arrears || 0);
-      return [data.roll_number, data.student_name, data.class, `Rs. ${data.base_fee}`, `Rs. ${data.arrears}`];
+      return [data.roll_number, data.student_name, data.class || "N/A", `Rs. ${data.base_fee || 0}`, `Rs. ${data.arrears || 0}`];
     });
 
     const summary = [
       { label: "Total Students", value: snap.size },
       { label: "Total Arrears", value: `Rs. ${totalArrears}` },
-      { label: "Est. Monthly Revenue", value: `Rs. ${totalFee}` }
+      { label: "Estimated Monthly Revenue", value: `Rs. ${totalFee}` }
     ];
 
     downloadProfessionalPDF("Students Master Ledger", ["Roll No", "Student Name", "Class", "Base Fee", "Arrears"], body, summary);
@@ -151,11 +148,11 @@ function App() {
     downloadProfessionalPDF("Staff Employment Ledger", ["Staff Name", "Designation", "Base Salary", "Access Pin"], body, [{ label: "Total Employees", value: snap.size }]);
   };
 
-  // Original helper functions
+  // Logic helpers
   const getTeacherStats = (attendanceList, leaveList) => {
     const totalPresent = attendanceList.length;
     const totalLeave = leaveList.filter(l => l.status === "approved").length;
-    return { totalPresent, totalLeave, totalAbsent: Math.max(0, 26 - (totalPresent + totalLeave)) };
+    return { totalPresent, totalLeave, totalAbsent: 0 };
   };
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -209,9 +206,7 @@ function App() {
         let studentAttendanceCount = 0;
         todayStudAtt.docs.forEach(doc => {
           const data = doc.data().attendance_data;
-          if (data) {
-            studentAttendanceCount += Object.values(data).filter(v => v === 'P').length;
-          }
+          if (data) studentAttendanceCount += Object.values(data).filter(v => v === 'P').length;
         });
 
         setAdminAnalytics({
@@ -221,7 +216,7 @@ function App() {
           todayTeacherAttendance: todayTeachAtt.size,
           pendingLeaves: pendingLeavesSnap.size
         });
-      } catch (err) { console.error("Analytics fetch failed", err); }
+      } catch (err) { console.error("Stats Error", err); }
     }
   };
 
@@ -274,7 +269,7 @@ function App() {
         {userRole === 'admin' && view === 'dashboard' && (
           <>
             <div style={{...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12'}}>
-              <h4 style={{marginTop: 0, marginBottom: '10px', display: 'flex', alignItems: 'center'}}>📊 Admin Overview Panel</h4>
+              <h4 style={{marginTop: 0, marginBottom: '10px'}}>📊 Admin Overview Panel</h4>
               <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
                 <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
                   <small style={{display: 'block', opacity: 0.8}}>Total Students</small>
@@ -285,14 +280,14 @@ function App() {
                   <b style={{fontSize: '18px'}}>{adminAnalytics.totalStaff}</b>
                 </div>
                 <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                  <small style={{display: 'block', opacity: 0.8}}>Today Stud. Present</small>
+                  <small style={{display: 'block', opacity: 0.8}}>Today Student P</small>
                   <b style={{fontSize: '18px'}}>{adminAnalytics.todayStudentAttendance}</b>
                 </div>
                 <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                  <small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small>
+                  <small style={{display: 'block', opacity: 0.8}}>Today Teacher P</small>
                   <b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b>
                 </div>
-                <div onClick={() => setView('teacher_attendance_view')} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer'}}>
+                <div onClick={() => setView('teacher_attendance_view')} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer', textAlign: 'center'}}>
                   <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small>
                   <b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
                 </div>
@@ -307,7 +302,6 @@ function App() {
           </>
         )}
 
-        {/* Existing views (Profile, Dashboard, etc.) remain intact below */}
         {userRole === 'staff' && view === 'dashboard' && (
           <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
             <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
@@ -316,23 +310,58 @@ function App() {
               onClick={async () => {
                 const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName));
                 const attSnap = await getDocs(qAtt);
-                setMyAttendanceRecords(attSnap.docs.map(d => d.data()));
+                setMyAttendanceRecords(attSnap.docs.map(d => d.data()).sort((a,b) => b.timestamp - a.timestamp));
+                const qL = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
+                const lSnap = await getDocs(qL);
+                setMyLeaveRecords(lSnap.docs.map(d => d.data()));
                 setView('teacher_profile_view');
               }}
               style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}
             >
               👤 View My Profile
             </button>
+            <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+               <button onClick={() => setView('apply_leave')} style={{ flex:1, padding:'12px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📄 Apply Leave</button>
+               <button onClick={async () => {
+                 const qL = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
+                 const lSnap = await getDocs(qL);
+                 setMyLeaves(lSnap.docs.map(d => ({id: d.id, ...d.data()})));
+                 setView('my_leaves');
+               }} style={{ flex:1, padding:'12px', background:'#7f8c8d', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📜 My Leaves</button>
+            </div>
           </div>
         )}
 
-        {view === 'teacher_profile_view' && (myProfileData || selectedTeacherProfile) && (
-          <div>
-            <div style={cardStyle}>
-              <h2 style={{margin:0, color:'#1a4a8e'}}>{(myProfileData || selectedTeacherProfile).name}</h2>
-              <p style={{color:'#666', margin:'5px 0'}}>Role: {(myProfileData || selectedTeacherProfile).role}</p>
-              <button onClick={() => setView('dashboard')} style={actionBtn}>Back to Home</button>
-            </div>
+        {view === 'apply_leave' && (
+          <div style={cardStyle}>
+            <h3>Apply for Leave</h3>
+            <input type="date" value={leaveFrom} onChange={(e)=>setLeaveFrom(e.target.value)} style={inputStyle} />
+            <input type="date" value={leaveTo} onChange={(e)=>setLeaveTo(e.target.value)} style={inputStyle} />
+            <textarea placeholder="Reason..." value={leaveReason} onChange={(e)=>setLeaveReason(e.target.value)} style={{...inputStyle, height:'80px'}} />
+            <button onClick={async () => {
+              await addDoc(collection(db, "teacher_leaves"), { name: staffName, fromDate: leaveFrom, toDate: leaveTo, reason: leaveReason, status: "pending", appliedAt: serverTimestamp() });
+              alert("Submitted!"); setView('dashboard');
+            }} style={actionBtn}>Submit</button>
+            <button onClick={()=>setView('dashboard')} style={{...actionBtn, background:'#7f8c8d', marginTop:'10px'}}>Cancel</button>
+          </div>
+        )}
+
+        {view === 'add' && (
+          <div style={cardStyle}>
+            <h3 style={{marginTop:0}}>{editingStudent ? "Edit Student" : "New Admission"}</h3>
+            <input placeholder="Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <input placeholder="WhatsApp" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
+            <input type="number" placeholder="Fee" value={baseFee} onChange={(e)=>setBaseFee(e.target.value)} style={inputStyle} />
+            <input type="number" placeholder="Arrears" value={arrears} onChange={(e)=>setArrears(e.target.value)} style={inputStyle} />
+            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={async () => {
+              const d = { student_name:name, roll_number:rollNo, parent_whatsapp:whatsapp, class:selectedClass, base_fee:Number(baseFee), arrears:Number(arrears) };
+              editingStudent ? await updateDoc(doc(db,"ali_campus_records",editingStudent.id), d) : await addDoc(collection(db,"ali_campus_records"), {...d, created_at:serverTimestamp()});
+              alert("Saved!"); setView('dashboard'); clearInputs();
+            }} style={actionBtn}>Save</button>
           </div>
         )}
 
@@ -346,9 +375,41 @@ function App() {
                 setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 setView('view');
               }} style={cardStyle}>
-                <small style={{color:'#1a4a8e'}}>{c}</small>
+                <small>{c}</small>
                 <div style={{fontSize:'22px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
               </div>
+            ))}
+          </div>
+        )}
+
+        {(view==='sel_view'||view==='sel_att'||view==='sel_report') && (
+          <div style={cardStyle}>
+            <h3>Select Class</h3>
+            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+            <button onClick={async ()=> {
+              const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
+              const recSnap = await getDocs(qRec);
+              setRecords(recSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+              setView(view==='sel_view'?'view':'attendance');
+            }} style={actionBtn}>Proceed</button>
+          </div>
+        )}
+
+        {view === 'staff_list' && (
+          <div>
+            <div style={cardStyle}>
+              <h3>Add Staff</h3>
+              <input placeholder="Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle}/>
+              <input placeholder="Role" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle}/>
+              <input placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle}/>
+              <input placeholder="Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle}/>
+              <button onClick={async ()=>{
+                await addDoc(collection(db, "staff_records"), {name:sName, role:sRole, salary:sSalary, password:sPass});
+                alert("Added"); setView('dashboard');
+              }} style={actionBtn}>Add</button>
+            </div>
+            {staffRecords.map(s => (
+              <div key={s.id} style={cardStyle}><b>{s.name}</b> - {s.role} (Pin: {s.password})</div>
             ))}
           </div>
         )}
