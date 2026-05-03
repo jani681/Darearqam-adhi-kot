@@ -132,7 +132,6 @@ function App() {
       try {
         const data = JSON.parse(event.target.result);
         
-        // Simple validation
         if (!data.students || !data.staff || !data.attendance) {
           throw new Error("Invalid backup file format");
         }
@@ -140,19 +139,15 @@ function App() {
         if (window.confirm(`Found ${data.students.length} students and ${data.staff.length} staff records. This will ADD them to the database. Continue?`)) {
           addNotification("Restoring data...", "info");
           
-          // Restore Students
           for (const student of data.students) {
             await addDoc(collection(db, "ali_campus_records"), student);
           }
-          // Restore Staff
           for (const s of data.staff) {
             await addDoc(collection(db, "staff_records"), s);
           }
-          // Restore Daily Attendance
           for (const att of data.attendance) {
             await addDoc(collection(db, "daily_attendance"), att);
           }
-          // Restore Teacher Attendance
           if (data.teacher_attendance) {
             for (const tAtt of data.teacher_attendance) {
               await addDoc(collection(db, "teacher_attendance"), tAtt);
@@ -168,7 +163,7 @@ function App() {
       }
     };
     reader.readAsText(file);
-    e.target.value = null; // Reset file input
+    e.target.value = null; 
   };
 
   // ===== SMART FILTERING LOGIC =====
@@ -302,22 +297,47 @@ function App() {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))); 
   };
 
-  const handleTeacherAttendance = () => {
+  const handleTeacherAttendance = async () => {
     if (!navigator.geolocation) return alert("Location not supported");
-    setStatus('Checking...');
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, SCHOOL_COORDS.lat, SCHOOL_COORDS.lng);
-      if (dist <= 500) {
-        await addDoc(collection(db, "teacher_attendance"), { name: staffName, date: today, time: new Date().toLocaleTimeString(), timestamp: serverTimestamp(), distance: Math.round(dist) + "m" });
-        alert("Attendance Marked!"); 
-        setStatus('Done');
-        addNotification("Attendance marked successfully", "success");
-      } else { 
-        alert(`Too far! ${Math.round(dist)}m.`); 
-        setStatus('Out of Range');
-        addNotification(`Failed: Out of range (${Math.round(dist)}m)`, "warning");
+    
+    try {
+      setStatus('Checking records...');
+      // Validation: Check if already marked today
+      const qCheck = query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today));
+      const checkSnap = await getDocs(qCheck);
+      
+      if (!checkSnap.empty) {
+        alert("You have already marked attendance today");
+        addNotification("Attendance already exists for today", "warning");
+        setStatus('Already Marked');
+        return;
       }
-    }, () => alert("Enable Location Access!"));
+
+      setStatus('Verifying Location...');
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, SCHOOL_COORDS.lat, SCHOOL_COORDS.lng);
+        if (dist <= 500) {
+          await addDoc(collection(db, "teacher_attendance"), { 
+            name: staffName, 
+            date: today, 
+            time: new Date().toLocaleTimeString(), 
+            timestamp: serverTimestamp(), 
+            distance: Math.round(dist) + "m" 
+          });
+          alert("Attendance Marked!"); 
+          setStatus('Done');
+          addNotification("Attendance marked successfully", "success");
+        } else { 
+          alert(`Too far! ${Math.round(dist)}m.`); 
+          setStatus('Out of Range');
+          addNotification(`Failed: Out of range (${Math.round(dist)}m)`, "warning");
+        }
+      }, () => alert("Enable Location Access!"));
+    } catch (e) {
+      console.error(e);
+      alert("Error checking attendance");
+      setStatus('Error');
+    }
   };
 
   const handleLogin = async () => {
@@ -456,7 +476,6 @@ function App() {
 
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center', color:'white', position: 'relative' }}>
         
-        {/* NOTIFICATION BELL ICON */}
         <div 
           onClick={() => setShowNotifPanel(!showNotifPanel)}
           style={{ position: 'absolute', top: '15px', right: '20px', cursor: 'pointer', padding: '5px' }}
@@ -526,7 +545,6 @@ function App() {
               </div>
             </div>
 
-            {/* BACKUP & RESTORE SECTION */}
             <div style={{...cardStyle, borderLeft: '6px solid #9b59b6'}}>
               <h4 style={{marginTop:0}}>🛡️ Data Protection</h4>
               <button onClick={handleDownloadBackup} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#9b59b6'}}>Download Full Backup (JSON)</button>
@@ -544,7 +562,6 @@ function App() {
               >
                 Upload Backup & Restore
               </button>
-              <p style={{fontSize: '10px', color: '#666', marginTop: '5px'}}>* Restore adds data without deleting current records.</p>
             </div>
 
             <div style={cardStyle}>
@@ -748,28 +765,14 @@ function App() {
             <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
                 <h4 style={{margin:'0 0 10px 0'}}>Smart Filter</h4>
                 <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
-                    <input 
-                      placeholder="Search Name or Roll No..." 
-                      value={searchQuery} 
-                      onChange={(e) => setSearchQuery(e.target.value)} 
-                      style={{...inputStyle, margin:0}} 
-                    />
+                    <input placeholder="Search Name or Roll No..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, margin:0}} />
                 </div>
                 <div style={{display:'flex', gap:'10px'}}>
-                    <select 
-                      value={classFilter} 
-                      onChange={(e) => setClassFilter(e.target.value)} 
-                      style={{...inputStyle, margin:0, flex:1}}
-                    >
+                    <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{...inputStyle, margin:0, flex:1}}>
                         <option value="All">All Classes</option>
                         {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <button 
-                        onClick={() => { setSearchQuery(''); setClassFilter('All'); }}
-                        style={{background:'#7f8c8d', color:'white', border:'none', borderRadius:'10px', padding:'0 15px', fontWeight:'bold'}}
-                    >
-                        Clear
-                    </button>
+                    <button onClick={() => { setSearchQuery(''); setClassFilter('All'); }} style={{background:'#7f8c8d', color:'white', border:'none', borderRadius:'10px', padding:'0 15px', fontWeight:'bold'}}>Clear</button>
                 </div>
             </div>
 
@@ -788,7 +791,6 @@ function App() {
                 </div>
               </div>
             ))}
-            {getFilteredRecords().length === 0 && <p style={{textAlign:'center', color:'#999'}}>No students match your filter.</p>}
           </div>
         )}
 
@@ -797,12 +799,7 @@ function App() {
             <h3 style={{textAlign:'center', margin:'0 0 15px 0'}}>{filterClass} - {today}</h3>
             
             <div style={{...cardStyle, borderLeft:'6px solid #2ecc71', padding:'10px'}}>
-                <input 
-                    placeholder="Find Student in List..." 
-                    value={searchQuery} 
-                    onChange={(e) => setSearchQuery(e.target.value)} 
-                    style={{...inputStyle, margin:0}}
-                />
+                <input placeholder="Find Student in List..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, margin:0}}/>
             </div>
 
             {getFilteredRecords().map(r => (
@@ -818,13 +815,30 @@ function App() {
               </div>
             ))}
             
-            {getFilteredRecords().length === 0 && <p style={{textAlign:'center', color:'#999', padding:'20px'}}>No students found.</p>}
-
             <button onClick={async ()=>{
-              await addDoc(collection(db,"daily_attendance"), {class:filterClass, date:today, attendance_data:attendance, timestamp:serverTimestamp()});
-              alert("Attendance Saved!"); 
-              addNotification(`Attendance submitted for ${filterClass}`, "success");
-              setView('dashboard'); setAttendance({}); setSearchQuery('');
+              try {
+                // Validation: Check if class attendance already marked today
+                const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("date", "==", today));
+                const checkSnap = await getDocs(qCheck);
+                
+                if (!checkSnap.empty) {
+                  alert("Attendance already marked for this class today");
+                  addNotification(`Duplicate attempt: ${filterClass}`, "warning");
+                  return;
+                }
+
+                await addDoc(collection(db,"daily_attendance"), {
+                  class:filterClass, 
+                  date:today, 
+                  attendance_data:attendance, 
+                  timestamp:serverTimestamp()
+                });
+                alert("Attendance Saved!"); 
+                addNotification(`Attendance submitted for ${filterClass}`, "success");
+                setView('dashboard'); setAttendance({}); setSearchQuery('');
+              } catch (e) {
+                alert("Error saving attendance");
+              }
             }} style={actionBtn}>Submit Attendance</button>
           </div>
         )}
@@ -833,9 +847,7 @@ function App() {
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
               <h3 style={{margin:0}}>Attendance History</h3>
-              {(userRole === 'admin' || userRole === 'staff') && (
-                <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
-              )}
+              <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
             </div>
             {history.map(h => (
               <div key={h.id} style={cardStyle}>
@@ -858,14 +870,7 @@ function App() {
                   <span>{t.name}</span>
                   <span style={{color:'#1a4a8e'}}>{t.time}</span>
                 </div>
-                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
-                  📅 {t.date} | 📍 Dist: {t.distance}
-                </div>
-                <div style={{fontSize:'11px', color:'#2ecc71', marginTop:'4px'}}>
-                  Stats: P:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalPresent} | 
-                  L:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalLeave} | 
-                  A:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalAbsent}
-                </div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📅 {t.date} | 📍 Dist: {t.distance}</div>
                 <button 
                   onClick={async () => {
                     try {
@@ -930,9 +935,7 @@ function App() {
           <div style={cardStyle}>
              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
                <h4 style={{margin:0}}>{filterClass} Report</h4>
-               {userRole === 'admin' && (
-                 <button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
-               )}
+               <button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
              </div>
              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
                <thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead>
@@ -952,9 +955,8 @@ function App() {
               const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
               const recSnap = await getDocs(qRec);
               const studentMap = {};
-              recSnap.docs.forEach(d => { 
-                  studentMap[d.id] = { name: d.data().student_name, roll: d.data().roll_number }; 
-              });
+              recSnap.docs.forEach(d => { studentMap[d.id] = { name: d.data().student_name, roll: d.data().roll_number }; });
+              
               if(view==='sel_report') {
                 const q = query(collection(db, "daily_attendance"), where("class", "==", filterClass));
                 const snap = await getDocs(q);
@@ -972,7 +974,6 @@ function App() {
                 });
                 setMonthlyData(Object.entries(summary).map(([k, v]) => [JSON.parse(k), v]));
                 setView('monthly_report');
-                addNotification(`Generated ${filterClass} report for ${selectedMonth}`, "info");
               } else {
                 setRecords(recSnap.docs.map(d => ({ id: d.id, ...d.data(), class: filterClass })));
                 setView(view==='sel_view'?'view':'attendance');
@@ -1001,14 +1002,7 @@ function App() {
               <div key={s.id} style={cardStyle}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                    <b>{s.name}</b>
-                   <button onClick={async ()=>{
-                     if(window.confirm("Remove staff?")) {
-                       await deleteDoc(doc(db, "staff_records", s.id));
-                       addNotification(`Removed staff member: ${s.name}`, "warning");
-                       const snap = await getDocs(query(collection(db, "staff_records"))); 
-                       setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                     }
-                   }} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button>
+                   <button onClick={async ()=>{if(window.confirm("Remove staff?")) { await deleteDoc(doc(db, "staff_records", s.id)); addNotification(`Removed: ${s.name}`, "warning"); const snap = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }}} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button>
                 </div>
                 <div style={{fontSize:'12px', color:'#666'}}>Role: {s.role} | PWD: {s.password}</div>
               </div>
