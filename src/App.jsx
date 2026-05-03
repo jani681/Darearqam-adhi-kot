@@ -55,11 +55,15 @@ function App() {
   const [allLeaves, setAllLeaves] = useState([]);
   const [myLeaveRecords, setMyLeaveRecords] = useState([]);
 
-  // NEW PREVIEW STATES
+  // PREVIEW STATES
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState([]);
   const [previewHeaders, setPreviewHeaders] = useState([]);
   const [previewFileName, setPreviewFileName] = useState('');
+
+  // NEW FILTER STATES
+  const [searchQuery, setSearchQuery] = useState('');
+  const [classFilter, setClassFilter] = useState('All');
 
   const [adminAnalytics, setAdminAnalytics] = useState({
     totalStudents: 0,
@@ -70,6 +74,19 @@ function App() {
   });
 
   const today = new Date().toISOString().split('T')[0];
+
+  // ===== SMART FILTERING LOGIC =====
+  const getFilteredRecords = () => {
+    return records.filter(r => {
+      const matchesSearch = 
+        r.student_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        r.roll_number.toString().includes(searchQuery);
+      
+      const matchesClass = classFilter === 'All' || r.class === classFilter;
+      
+      return matchesSearch && matchesClass;
+    });
+  };
 
   // ===== CSV EXPORT LOGIC =====
   const downloadCSV = (data, headers, fileName) => {
@@ -310,8 +327,8 @@ function App() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop:'15px', background:'#f0f2f5', padding:'10px', borderRadius:'15px' }}>
           <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
           {userRole === 'admin' && <button onClick={() => { clearInputs(); setView('add'); }} style={getNavStyle('add')}>📝 Admit</button>}
-          {userRole === 'admin' && <button onClick={() => setView('sel_view')} style={getNavStyle('sel_view')}>📂 Dir</button>}
-          <button onClick={() => setView('sel_att')} style={getNavStyle('sel_att')}>✅ Atten</button>
+          {userRole === 'admin' && <button onClick={() => { setClassFilter('All'); setSearchQuery(''); setView('sel_view'); }} style={getNavStyle('sel_view')}>📂 Dir</button>}
+          <button onClick={() => { setClassFilter('All'); setSearchQuery(''); setView('sel_att'); }} style={getNavStyle('sel_att')}>✅ Atten</button>
           {userRole === 'admin' && <button onClick={async () => { const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d=>({id:d.id, ...d.data()}))); setView('staff_list'); }} style={getNavStyle('staff_list')}>👥 Staff</button>}
           <button onClick={async () => { const h = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp","desc"))); setHistory(h.docs.map(d=>({id:d.id, ...d.data()}))); setView('history'); }} style={getNavStyle('history')}>📜 Hist</button>
           {userRole === 'admin' && <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>}
@@ -553,8 +570,35 @@ function App() {
 
         {view === 'view' && (
           <div>
-            <input placeholder="Search Student..." onChange={(e)=>setSearchTerm(e.target.value)} style={inputStyle} />
-            {records.filter(r=>r.student_name.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
+            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
+                <h4 style={{margin:'0 0 10px 0'}}>Smart Filter</h4>
+                <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
+                    <input 
+                      placeholder="Search Name or Roll No..." 
+                      value={searchQuery} 
+                      onChange={(e) => setSearchQuery(e.target.value)} 
+                      style={{...inputStyle, margin:0}} 
+                    />
+                </div>
+                <div style={{display:'flex', gap:'10px'}}>
+                    <select 
+                      value={classFilter} 
+                      onChange={(e) => setClassFilter(e.target.value)} 
+                      style={{...inputStyle, margin:0, flex:1}}
+                    >
+                        <option value="All">All Classes</option>
+                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <button 
+                        onClick={() => { setSearchQuery(''); setClassFilter('All'); }}
+                        style={{background:'#7f8c8d', color:'white', border:'none', borderRadius:'10px', padding:'0 15px', fontWeight:'bold'}}
+                    >
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            {getFilteredRecords().map(r => (
               <div key={r.id} style={cardStyle}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                   <span><b>{r.student_name}</b> ({r.roll_number})</span>
@@ -562,31 +606,48 @@ function App() {
                     <span style={{fontSize:'16px'}}>🟢</span> WhatsApp
                   </a>
                 </div>
-                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>Fee: {r.base_fee} | Baqaya: {r.arrears || 0}</div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>Class: {r.class} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}</div>
                 <div style={{marginTop:'10px'}}>
                   <button onClick={()=>{setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp); setBaseFee(r.base_fee); setArrears(r.arrears); setView('add');}} style={{background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', marginRight:'10px'}}>Edit</button>
                   <button onClick={async ()=>{if(window.confirm("Delete?")){await deleteDoc(doc(db,"ali_campus_records",r.id)); setView('dashboard');}}} style={{background:'#e74c3c', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px'}}>Delete</button>
                 </div>
               </div>
             ))}
+            {getFilteredRecords().length === 0 && <p style={{textAlign:'center', color:'#999'}}>No students match your filter.</p>}
           </div>
         )}
 
         {view === 'attendance' && (
           <div>
-            <h3 style={{textAlign:'center'}}>{filterClass} - {today}</h3>
-            {records.map(r => (
+            <h3 style={{textAlign:'center', margin:'0 0 15px 0'}}>{filterClass} - {today}</h3>
+            
+            <div style={{...cardStyle, borderLeft:'6px solid #2ecc71', padding:'10px'}}>
+                <input 
+                    placeholder="Find Student in List..." 
+                    value={searchQuery} 
+                    onChange={(e) => setSearchQuery(e.target.value)} 
+                    style={{...inputStyle, margin:0}}
+                />
+            </div>
+
+            {getFilteredRecords().map(r => (
               <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <span>{r.student_name}</span>
+                <div>
+                    <div style={{fontWeight:'bold'}}>{r.student_name}</div>
+                    <div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div>
+                </div>
                 <div>
                   <button onClick={()=>setAttendance({...attendance, [r.id]:'P'})} style={{background:attendance[r.id]==='P'?'#2ecc71':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', marginRight:'5px'}}>P</button>
                   <button onClick={()=>setAttendance({...attendance, [r.id]:'A'})} style={{background:attendance[r.id]==='A'?'#e74c3c':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px'}}>A</button>
                 </div>
               </div>
             ))}
+            
+            {getFilteredRecords().length === 0 && <p style={{textAlign:'center', color:'#999', padding:'20px'}}>No students found.</p>}
+
             <button onClick={async ()=>{
               await addDoc(collection(db,"daily_attendance"), {class:filterClass, date:today, attendance_data:attendance, timestamp:serverTimestamp()});
-              alert("Attendance Saved!"); setView('dashboard'); setAttendance({});
+              alert("Attendance Saved!"); setView('dashboard'); setAttendance({}); setSearchQuery('');
             }} style={actionBtn}>Submit Attendance</button>
           </div>
         )}
@@ -624,9 +685,9 @@ function App() {
                   📅 {t.date} | 📍 Dist: {t.distance}
                 </div>
                 <div style={{fontSize:'11px', color:'#2ecc71', marginTop:'4px'}}>
-                  Stats: P:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => l => l.name === t.name)).totalPresent} | 
-                  L:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => l => l.name === t.name)).totalLeave} | 
-                  A:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => l => l.name === t.name)).totalAbsent}
+                  Stats: P:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalPresent} | 
+                  L:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalLeave} | 
+                  A:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalAbsent}
                 </div>
                 <button 
                   onClick={async () => {
@@ -733,7 +794,7 @@ function App() {
                 setMonthlyData(Object.entries(summary).map(([k, v]) => [JSON.parse(k), v]));
                 setView('monthly_report');
               } else {
-                setRecords(recSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+                setRecords(recSnap.docs.map(d => ({ id: d.id, ...d.data(), class: filterClass })));
                 setView(view==='sel_view'?'view':'attendance');
               }
             }} style={actionBtn}>Proceed</button>
