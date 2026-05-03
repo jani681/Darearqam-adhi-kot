@@ -43,6 +43,10 @@ function App() {
   const [teacherAttendanceList, setTeacherAttendanceList] = useState([]);
   const [tAttSearchDate, setTAttSearchDate] = useState('');
 
+  // STATES FOR TEACHER PROFILE FEATURE
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [teacherProfileRecords, setTeacherProfileRecords] = useState([]);
+
   const today = new Date().toISOString().split('T')[0];
 
   // --- IMPROVED PDF LOGIC ---
@@ -280,9 +284,39 @@ function App() {
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
                   📅 {t.date} | 📍 Dist: {t.distance}
                 </div>
+                <button onClick={async () => {
+                  const staffSnap = await getDocs(query(collection(db, "staff_records"), where("name", "==", t.name)));
+                  const staffData = staffSnap.empty ? { name: t.name, role: 'Staff' } : staffSnap.docs[0].data();
+                  const attSnap = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", t.name), orderBy("timestamp", "desc")));
+                  setSelectedTeacher(staffData);
+                  setTeacherProfileRecords(attSnap.docs.map(d => d.data()));
+                  setView('teacher_profile_view');
+                }} style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>View Profile</button>
               </div>
             ))}
             {teacherAttendanceList.length === 0 && <p style={{textAlign:'center'}}>No records found.</p>}
+          </div>
+        )}
+
+        {/* NEW TEACHER PROFILE VIEW */}
+        {view === 'teacher_profile_view' && selectedTeacher && (
+          <div>
+            <div style={cardStyle}>
+              <h3 style={{margin:0, color:'#1a4a8e'}}>{selectedTeacher.name}</h3>
+              <p style={{margin:'5px 0', fontWeight:'bold', color:'#666'}}>{selectedTeacher.role}</p>
+              <button onClick={() => downloadPDF("Teacher Profile Report", ["Name", "Date", "Time", "Distance"], teacherProfileRecords.map(r => [selectedTeacher.name, r.date, r.time, r.distance]), `${selectedTeacher.name}_Profile_Report`)} style={{marginTop:'10px', background:'#1a4a8e', color:'white', border:'none', padding:'10px', borderRadius:'8px', width:'100%', fontWeight:'bold', cursor:'pointer'}}>Download Profile PDF</button>
+            </div>
+            <h4 style={{margin:'20px 0 10px'}}>Attendance Records</h4>
+            {teacherProfileRecords.map((r, i) => (
+              <div key={i} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between'}}>
+                  <b>{r.date}</b>
+                  <span style={{color:'#1a4a8e'}}>{r.time}</span>
+                </div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📍 Distance: {r.distance}</div>
+              </div>
+            ))}
+            <button onClick={() => setView('teacher_attendance_view')} style={actionBtn}>Back to List</button>
           </div>
         )}
 
