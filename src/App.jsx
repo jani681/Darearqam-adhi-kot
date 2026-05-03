@@ -39,25 +39,19 @@ function App() {
   const [monthlyData, setMonthlyData] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
-  // NEW STATES FOR TEACHER ATTENDANCE FEATURE
   const [teacherAttendanceList, setTeacherAttendanceList] = useState([]);
   const [tAttSearchDate, setTAttSearchDate] = useState('');
 
-  // --- NEW STATES FOR TEACHER PROFILE FEATURE ---
   const [selectedTeacherProfile, setSelectedTeacherProfile] = useState(null);
   const [teacherProfileRecords, setTeacherProfileRecords] = useState([]);
 
-  // NEW STATE FOR LOGGED-IN TEACHER PROFILE
   const [myProfileData, setMyProfileData] = useState(null);
   const [myAttendanceRecords, setMyAttendanceRecords] = useState([]);
 
   const today = new Date().toISOString().split('T')[0];
 
-  // --- IMPROVED PDF LOGIC ---
   const downloadPDF = (title, headers, bodyData, fileName) => {
     const doc = new jsPDF();
-    
-    // Header
     doc.setFillColor(26, 74, 142);
     doc.rect(0, 0, 210, 30, 'F');
     doc.setTextColor(255, 255, 255);
@@ -65,8 +59,6 @@ function App() {
     doc.text("DAR-E-ARQAM (ALI CAMPUS)", 105, 15, { align: 'center' });
     doc.setFontSize(12);
     doc.text(title, 105, 25, { align: 'center' });
-
-    // Table
     doc.autoTable({ 
       head: [headers], 
       body: bodyData, 
@@ -76,8 +68,6 @@ function App() {
       alternateRowStyles: { fillColor: [240, 240, 240] },
       margin: { top: 40 }
     });
-
-    // Footer
     const pageCount = doc.internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
@@ -85,7 +75,6 @@ function App() {
         doc.setTextColor(100);
         doc.text(`Generated on: ${new Date().toLocaleString()} | Page ${i} of ${pageCount}`, 14, 285);
     }
-
     doc.save(`${fileName}.pdf`);
   };
 
@@ -172,7 +161,6 @@ function App() {
           <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
             <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
             <p style={{fontSize:'10px', color:'#666', marginTop:'5px'}}>Range: 500m | Status: {status}</p>
-            {/* --- FEATURE 1: VIEW MY PROFILE BUTTON (TEACHER SIDE ONLY) --- */}
             <button 
               onClick={async () => {
                 const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
@@ -194,7 +182,6 @@ function App() {
           </div>
         )}
 
-        {/* --- TEACHER PROFILE VIEW --- */}
         {view === 'teacher_profile_view' && (myProfileData || selectedTeacherProfile) && (
           <div>
             <div style={cardStyle}>
@@ -211,7 +198,7 @@ function App() {
                 )}
                 style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}
               >
-                Download Profile PDF
+                Download My Profile PDF
               </button>
             </div>
 
@@ -309,7 +296,6 @@ function App() {
           </div>
         )}
 
-        {/* History View with PDF Download */}
         {view === 'history' && (
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
@@ -326,7 +312,6 @@ function App() {
           </div>
         )}
 
-        {/* NEW TEACHER ATTENDANCE VIEW */}
         {view === 'teacher_attendance_view' && (
           <div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
@@ -343,18 +328,16 @@ function App() {
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
                   📅 {t.date} | 📍 Dist: {t.distance}
                 </div>
-                {/* --- NEW VIEW PROFILE BUTTON --- */}
                 <button 
                   onClick={async () => {
                     const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
                     const staffSnap = await getDocs(qStaff);
-                    const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { role: "Staff" };
-                    
+                    const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
                     const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name), orderBy("timestamp", "desc"));
                     const attSnap = await getDocs(qAtt);
-                    
-                    setSelectedTeacherProfile({ name: t.name, ...staffData });
+                    setSelectedTeacherProfile(staffData);
                     setTeacherProfileRecords(attSnap.docs.map(d => d.data()));
+                    setMyProfileData(null); 
                     setView('teacher_profile_view');
                   }} 
                   style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}
@@ -363,11 +346,9 @@ function App() {
                 </button>
               </div>
             ))}
-            {teacherAttendanceList.length === 0 && <p style={{textAlign:'center'}}>No records found.</p>}
           </div>
         )}
 
-        {/* Improved Monthly Report View */}
         {view === 'monthly_report' && (
           <div style={cardStyle}>
              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
@@ -397,7 +378,6 @@ function App() {
               recSnap.docs.forEach(d => { 
                   studentMap[d.id] = { name: d.data().student_name, roll: d.data().roll_number }; 
               });
-
               if(view==='sel_report') {
                 const q = query(collection(db, "daily_attendance"), where("class", "==", filterClass));
                 const snap = await getDocs(q);
