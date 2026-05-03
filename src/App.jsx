@@ -48,17 +48,13 @@ function App() {
   const [myProfileData, setMyProfileData] = useState(null);
   const [myAttendanceRecords, setMyAttendanceRecords] = useState([]);
 
-  // --- NEW LEAVE STATES ---
   const [leaveFrom, setLeaveFrom] = useState('');
   const [leaveTo, setLeaveTo] = useState('');
   const [leaveReason, setLeaveReason] = useState('');
   const [myLeaves, setMyLeaves] = useState([]);
   const [allLeaves, setAllLeaves] = useState([]);
-
-  // ===== NEW CODE START =====
   const [myLeaveRecords, setMyLeaveRecords] = useState([]);
 
-  // --- ADMIN ANALYTICS STATE ---
   const [adminAnalytics, setAdminAnalytics] = useState({
     totalStudents: 0,
     totalStaff: 0,
@@ -67,15 +63,78 @@ function App() {
     pendingLeaves: 0
   });
 
+  const today = new Date().toISOString().split('T')[0];
+
+  // ===== NEW CSV EXPORT LOGIC START =====
+  const downloadCSV = (data, headers, fileName) => {
+    const csvRows = [];
+    csvRows.push(headers.join(','));
+    data.forEach(row => {
+      const values = headers.map(header => {
+        const val = row[header] || '';
+        return `"${String(val).replace(/"/g, '""')}"`;
+      });
+      csvRows.push(values.join(','));
+    });
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${fileName}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportStudents = async () => {
+    try {
+      const snap = await getDocs(collection(db, "ali_campus_records"));
+      const data = snap.docs.map(d => ({
+        student_name: d.data().student_name,
+        roll_number: d.data().roll_number,
+        class: d.data().class,
+        base_fee: d.data().base_fee,
+        arrears: d.data().arrears
+      }));
+      downloadCSV(data, ["student_name", "roll_number", "class", "base_fee", "arrears"], "All_Students_Data");
+    } catch (e) { alert("Export failed"); }
+  };
+
+  const handleExportStaff = async () => {
+    try {
+      const snap = await getDocs(collection(db, "staff_records"));
+      const data = snap.docs.map(d => ({
+        name: d.data().name,
+        role: d.data().role,
+        salary: d.data().salary,
+        password: d.data().password
+      }));
+      downloadCSV(data, ["name", "role", "salary", "password"], "Staff_Records");
+    } catch (e) { alert("Export failed"); }
+  };
+
+  const handleExportTodayAttendance = async () => {
+    try {
+      const q = query(collection(db, "daily_attendance"), where("date", "==", today));
+      const snap = await getDocs(q);
+      const data = snap.docs.map(d => ({
+        class: d.data().class,
+        date: d.data().date,
+        total_marked: Object.keys(d.data().attendance_data || {}).length
+      }));
+      downloadCSV(data, ["class", "date", "total_marked"], `Attendance_${today}`);
+    } catch (e) { alert("Export failed"); }
+  };
+  // ===== NEW CSV EXPORT LOGIC END =====
+
   const getTeacherStats = (attendanceList, leaveList) => {
     const totalPresent = attendanceList.length;
     const totalLeave = leaveList.filter(l => l.status === "approved").length;
-    const totalAbsent = 0; // Safe fallback as requested
+    const totalAbsent = 0; 
     return { totalPresent, totalLeave, totalAbsent };
   };
-  // ===== NEW CODE END =====
-
-  const today = new Date().toISOString().split('T')[0];
 
   const downloadPDF = (title, headers, bodyData, fileName) => {
     const doc = new jsPDF();
@@ -146,7 +205,6 @@ function App() {
     snap.docs.forEach(d => { const cls = d.data().class; stats[cls] = (stats[cls] || 0) + 1; });
     setClassStats(stats);
     
-    // FETCH ADMIN ANALYTICS ONLY FOR ADMIN
     if (userRole === 'admin') {
       try {
         const staffSnap = await getDocs(collection(db, "staff_records"));
@@ -169,9 +227,7 @@ function App() {
           todayTeacherAttendance: todayTeachAtt.size,
           pendingLeaves: pendingLeavesSnap.size
         });
-      } catch (err) {
-        console.error("Analytics fetch failed", err);
-      }
+      } catch (err) { console.error("Analytics fetch failed", err); }
     }
   };
 
@@ -211,7 +267,6 @@ function App() {
           {userRole === 'admin' && <button onClick={async () => { 
             const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
             setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
-            // Fetch Leaves for Admin
             const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
             setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
             setView('teacher_attendance_view'); 
@@ -222,39 +277,48 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
         
-        {/* SAFE READ-ONLY ADMIN ANALYTICS DASHBOARD + LEAVE QUICK VIEW */}
         {userRole === 'admin' && view === 'dashboard' && (
-          <div style={{...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12'}}>
-            <h4 style={{marginTop: 0, marginBottom: '10px', display: 'flex', alignItems: 'center'}}>📊 Admin Overview Panel</h4>
-            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                <small style={{display: 'block', opacity: 0.8}}>Total Students</small>
-                <b style={{fontSize: '18px'}}>{adminAnalytics.totalStudents}</b>
-              </div>
-              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                <small style={{display: 'block', opacity: 0.8}}>Total Staff</small>
-                <b style={{fontSize: '18px'}}>{adminAnalytics.totalStaff}</b>
-              </div>
-              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                <small style={{display: 'block', opacity: 0.8}}>Today Stud. Present</small>
-                <b style={{fontSize: '18px'}}>{adminAnalytics.todayStudentAttendance}</b>
-              </div>
-              <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                <small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small>
-                <b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b>
-              </div>
-              <div onClick={async () => {
-                 const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
-                 setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
-                 const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
-                 setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
-                 setView('teacher_attendance_view');
-              }} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer'}}>
-                <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small>
-                <b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
+          <>
+            <div style={{...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12'}}>
+              <h4 style={{marginTop: 0, marginBottom: '10px', display: 'flex', alignItems: 'center'}}>📊 Admin Overview Panel</h4>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
+                  <small style={{display: 'block', opacity: 0.8}}>Total Students</small>
+                  <b style={{fontSize: '18px'}}>{adminAnalytics.totalStudents}</b>
+                </div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
+                  <small style={{display: 'block', opacity: 0.8}}>Total Staff</small>
+                  <b style={{fontSize: '18px'}}>{adminAnalytics.totalStaff}</b>
+                </div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
+                  <small style={{display: 'block', opacity: 0.8}}>Today Stud. Present</small>
+                  <b style={{fontSize: '18px'}}>{adminAnalytics.todayStudentAttendance}</b>
+                </div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
+                  <small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small>
+                  <b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b>
+                </div>
+                <div onClick={async () => {
+                   const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
+                   setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
+                   const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
+                   setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
+                   setView('teacher_attendance_view');
+                }} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer'}}>
+                  <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small>
+                  <b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
+                </div>
               </div>
             </div>
-          </div>
+
+            {/* NEW EXPORT SECTION FOR ADMIN */}
+            <div style={cardStyle}>
+              <h4 style={{marginTop:0}}>📥 Data Backup (CSV)</h4>
+              <button onClick={handleExportStudents} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px'}}>Download Students CSV</button>
+              <button onClick={handleExportStaff} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#2ecc71'}}>Download Staff CSV</button>
+              <button onClick={handleExportTodayAttendance} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#7f8c8d'}}>Download Today Attendance CSV</button>
+            </div>
+          </>
         )}
 
         {userRole === 'staff' && view === 'dashboard' && (
@@ -273,11 +337,9 @@ function App() {
                   const attSnap = await getDocs(qAtt);
                   const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                   setMyAttendanceRecords(sortedAtt);
-                  // ===== NEW CODE START =====
                   const qLeaves = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
                   const leaveSnap = await getDocs(qLeaves);
                   setMyLeaveRecords(leaveSnap.docs.map(d => d.data()));
-                  // ===== NEW CODE END =====
                   setView('teacher_profile_view');
                 } catch (err) { alert("Error loading profile."); }
               }}
@@ -285,8 +347,6 @@ function App() {
             >
               👤 View My Profile
             </button>
-
-            {/* --- NEW TEACHER LEAVE BUTTONS --- */}
             <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
                <button onClick={() => setView('apply_leave')} style={{ flex:1, padding:'12px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📄 Apply Leave</button>
                <button onClick={async () => {
@@ -299,7 +359,6 @@ function App() {
           </div>
         )}
 
-        {/* --- NEW APPLY LEAVE VIEW --- */}
         {view === 'apply_leave' && (
           <div style={cardStyle}>
             <h3 style={{marginTop:0}}>Apply for Leave</h3>
@@ -322,7 +381,6 @@ function App() {
           </div>
         )}
 
-        {/* --- NEW MY LEAVES HISTORY VIEW --- */}
         {view === 'my_leaves' && (
           <div>
             <h3>My Leave Requests</h3>
@@ -347,21 +405,17 @@ function App() {
               <p style={{color:'#666', margin:'5px 0'}}>Role: {(myProfileData || selectedTeacherProfile).role}</p>
               { (myProfileData || selectedTeacherProfile).salary && <p style={{color:'#666', margin:'5px 0'}}>Salary/Pay: {(myProfileData || selectedTeacherProfile).salary}</p> }
               
-              {/* ===== NEW CODE START ===== */}
               <div style={{marginTop:'10px', padding:'10px', background:'#f8f9fa', borderRadius:'8px', fontSize:'13px'}}>
                 <strong>Attendance Summary:</strong><br/>
                 Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | 
                 Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave} | 
                 Absent: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalAbsent}
               </div>
-              {/* ===== NEW CODE END ===== */}
 
               <button 
-                // ===== NEW CODE START (IMPROVED PDF TRIGGER) =====
                 onClick={async () => {
                    const currentStaffName = (myProfileData || selectedTeacherProfile).name;
-                   // Fetch latest leave applications count for report
-                   const qApproved = query(collection(db, "leave_applications"), where("name", "==", currentStaffName), where("status", "==", "approved"));
+                   const qApproved = query(collection(db, "teacher_leaves"), where("name", "==", currentStaffName), where("status", "==", "approved"));
                    const leaveSnap = await getDocs(qApproved);
                    const approvedLeaveCount = leaveSnap.size;
                    const presentCount = (userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).length;
@@ -387,7 +441,6 @@ function App() {
                      `${currentStaffName}_Report`
                    );
                 }}
-                // ===== NEW CODE END =====
                 style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}
               >
                 Download My Profile PDF
@@ -520,13 +573,11 @@ function App() {
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
                   📅 {t.date} | 📍 Dist: {t.distance}
                 </div>
-                {/* ===== NEW CODE START ===== */}
                 <div style={{fontSize:'11px', color:'#2ecc71', marginTop:'4px'}}>
                   Stats: P:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalPresent} | 
                   L:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalLeave} | 
                   A:{getTeacherStats(teacherAttendanceList.filter(x => x.name === t.name), allLeaves.filter(al => al.name === t.name)).totalAbsent}
                 </div>
-                {/* ===== NEW CODE END ===== */}
                 <button 
                   onClick={async () => {
                     try {
@@ -549,7 +600,6 @@ function App() {
               </div>
             ))}
 
-            {/* --- NEW ADMIN LEAVE SECTION --- */}
             <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/>
             <h3 style={{color:'#1a4a8e'}}>Teacher Leave Applications</h3>
             {allLeaves.map(l => (
