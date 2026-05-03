@@ -47,6 +47,10 @@ function App() {
   const [selectedTeacherProfile, setSelectedTeacherProfile] = useState(null);
   const [teacherProfileRecords, setTeacherProfileRecords] = useState([]);
 
+  // NEW STATE FOR LOGGED-IN TEACHER PROFILE
+  const [myProfileData, setMyProfileData] = useState(null);
+  const [myAttendanceRecords, setMyAttendanceRecords] = useState([]);
+
   const today = new Date().toISOString().split('T')[0];
 
   // --- IMPROVED PDF LOGIC ---
@@ -168,6 +172,62 @@ function App() {
           <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
             <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
             <p style={{fontSize:'10px', color:'#666', marginTop:'5px'}}>Range: 500m | Status: {status}</p>
+            {/* --- FEATURE 1: VIEW MY PROFILE BUTTON (TEACHER SIDE ONLY) --- */}
+            <button 
+              onClick={async () => {
+                const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
+                const staffSnap = await getDocs(qStaff);
+                if(!staffSnap.empty) {
+                  setMyProfileData(staffSnap.docs[0].data());
+                } else {
+                  setMyProfileData({ name: staffName, role: "Teacher", salary: "N/A" });
+                }
+                const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName), orderBy("timestamp", "desc"));
+                const attSnap = await getDocs(qAtt);
+                setMyAttendanceRecords(attSnap.docs.map(d => d.data()));
+                setView('teacher_profile_view_personal');
+              }}
+              style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}
+            >
+              👤 View My Profile
+            </button>
+          </div>
+        )}
+
+        {/* --- FEATURE 2: TEACHER PROFILE VIEW (NEW VIEW) --- */}
+        {view === 'teacher_profile_view_personal' && myProfileData && (
+          <div>
+            <div style={cardStyle}>
+              <h3 style={{marginTop:0, color:'#1a4a8e'}}>My Profile</h3>
+              <p><b>Name:</b> {myProfileData.name}</p>
+              <p><b>Role:</b> {myProfileData.role}</p>
+              <p><b>Salary/Pay:</b> {myProfileData.salary}</p>
+              
+              {/* --- FEATURE 3: PDF DOWNLOAD --- */}
+              <button 
+                onClick={() => downloadPDF(
+                  "Teacher Profile Report", 
+                  ["Name", "Date", "Time", "Distance"], 
+                  myAttendanceRecords.map(r => [staffName, r.date, r.time, r.distance]), 
+                  staffName + "_Profile_Report"
+                )}
+                style={{ width:'100%', padding:'12px', background:'#2ecc71', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}
+              >
+                📄 Download My Profile PDF
+              </button>
+            </div>
+
+            <h4 style={{marginLeft:'5px'}}>My Attendance History</h4>
+            {myAttendanceRecords.map((r, idx) => (
+              <div key={idx} style={{...cardStyle, borderLeft:'6px solid #2ecc71'}}>
+                <div style={{display:'flex', justifyContent:'space-between'}}>
+                  <b>{r.date}</b>
+                  <span style={{color:'#1a4a8e'}}>{r.time}</span>
+                </div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📍 Distance: {r.distance}</div>
+              </div>
+            ))}
+            <button onClick={() => setView('dashboard')} style={actionBtn}>Back to Dashboard</button>
           </div>
         )}
 
