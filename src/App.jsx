@@ -1057,17 +1057,37 @@ function App() {
         )}
 
         {view === 'dashboard' && (
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+          <div style={{ 
+            display:'grid', 
+            gridTemplateColumns:'1fr 1fr', 
+            gap:'6px',
+            marginTop: '5px' 
+          }}>
             {CLASSES.map(c => (
-              <div key={c} onClick={async () => {
-                setFilterClass(c);
-                const q = query(collection(db, "ali_campus_records"), where("class", "==", c));
-                const snap = await getDocs(q);
-                setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                setView(userRole === 'admin' ? 'view' : 'attendance');
-              }} style={cardStyle}>
-                <small style={{color:'#1a4a8e'}}>{c}</small>
-                <div style={{fontSize:'22px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
+              <div 
+                key={c} 
+                onClick={async () => {
+                  setFilterClass(c);
+                  const q = query(collection(db, "ali_campus_records"), where("class", "==", c));
+                  const snap = await getDocs(q);
+                  setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                  setView(userRole === 'admin' ? 'view' : 'attendance');
+                }} 
+                style={{
+                  background: 'white',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
+                  borderLeft: '4px solid #f39c12',
+                  cursor: 'pointer',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <small style={{ color: '#1a4a8e', fontSize: '11px', fontWeight: 'bold' }}>{c}</small>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#333' }}>{classStats[c] || 0}</div>
               </div>
             ))}
           </div>
