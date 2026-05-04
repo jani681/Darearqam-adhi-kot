@@ -9,6 +9,16 @@ const SECTIONS = ["A", "B", "C"];
 const ADMIN_PASSWORD = "ali786"; 
 const SCHOOL_COORDS = { lat: 32.1072678, lng: 71.8037100 }; 
 
+const MOTIVATIONS = [
+  "Teaching is the one profession that creates all other professions.",
+  "Your influence as a teacher can never be erased.",
+  "The art of teaching is the art of assisting discovery.",
+  "Every student has a spark; you are the one who lights it.",
+  "Education is the most powerful weapon which you can use to change the world.",
+  "Small steps in the classroom lead to big leaps in the future.",
+  "A good teacher is like a candle—it consumes itself to light the way for others."
+];
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState(''); 
@@ -72,11 +82,15 @@ function App() {
   const [teacherDirectory, setTeacherDirectory] = useState([]);
   const [dirSearch, setDirSearch] = useState('');
 
-  // DELETE SYSTEM STATES
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // New Extension States
+  const [dailyQuote, setDailyQuote] = useState('');
+  const [teacherSummary, setTeacherSummary] = useState({ todayClasses: 0, attendanceMarked: false, pendingLeaves: 0 });
+  const [systemMessages, setSystemMessages] = useState([]);
 
   const [adminAnalytics, setAdminAnalytics] = useState({
     totalStudents: 0,
@@ -88,6 +102,20 @@ function App() {
 
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
+
+  useEffect(() => {
+    // Persistent Motivational Line logic
+    const savedQuote = localStorage.getItem('daily_quote_text');
+    const savedDate = localStorage.getItem('daily_quote_date');
+    if (savedDate === today && savedQuote) {
+      setDailyQuote(savedQuote);
+    } else {
+      const randomQuote = MOTIVATIONS[Math.floor(Math.random() * MOTIVATIONS.length)];
+      localStorage.setItem('daily_quote_text', randomQuote);
+      localStorage.setItem('daily_quote_date', today);
+      setDailyQuote(randomQuote);
+    }
+  }, [today]);
 
   const addNotification = (msg, type = 'success') => {
     const newNotif = {
@@ -138,29 +166,17 @@ function App() {
     reader.onload = async (event) => {
       try {
         const data = JSON.parse(event.target.result);
-        
         if (!data.students || !data.staff || !data.attendance) {
           throw new Error("Invalid backup file format");
         }
-
         if (window.confirm(`Found ${data.students.length} students and ${data.staff.length} staff records. This will ADD them to the database. Continue?`)) {
           addNotification("Restoring data...", "info");
-          
-          for (const student of data.students) {
-            await addDoc(collection(db, "ali_campus_records"), student);
-          }
-          for (const s of data.staff) {
-            await addDoc(collection(db, "staff_records"), s);
-          }
-          for (const att of data.attendance) {
-            await addDoc(collection(db, "daily_attendance"), att);
-          }
+          for (const student of data.students) await addDoc(collection(db, "ali_campus_records"), student);
+          for (const s of data.staff) await addDoc(collection(db, "staff_records"), s);
+          for (const att of data.attendance) await addDoc(collection(db, "daily_attendance"), att);
           if (data.teacher_attendance) {
-            for (const tAtt of data.teacher_attendance) {
-              await addDoc(collection(db, "teacher_attendance"), tAtt);
-            }
+            for (const tAtt of data.teacher_attendance) await addDoc(collection(db, "teacher_attendance"), tAtt);
           }
-
           addNotification("Data restored successfully", "success");
           fetchStats();
         }
@@ -175,13 +191,9 @@ function App() {
 
   const getFilteredRecords = () => {
     return records.filter(r => {
-      const matchesSearch = 
-        r.student_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        r.roll_number.toString().includes(searchQuery);
-      
+      const matchesSearch = r.student_name.toLowerCase().includes(searchQuery.toLowerCase()) || r.roll_number.toString().includes(searchQuery);
       const matchesClass = classFilter === 'All' || r.class === classFilter;
       const matchesSection = filterSection === 'All' || (r.section || 'General') === filterSection;
-      
       return matchesSearch && matchesClass && matchesSection;
     });
   };
@@ -306,19 +318,16 @@ function App() {
 
   const handleTeacherAttendance = async () => {
     if (!navigator.geolocation) return alert("Location not supported");
-    
     try {
       setStatus('Checking records...');
       const qCheck = query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today));
       const checkSnap = await getDocs(qCheck);
-      
       if (!checkSnap.empty) {
         alert("You have already marked attendance today");
         addNotification("Attendance already exists for today", "warning");
         setStatus('Already Marked');
         return;
       }
-
       setStatus('Verifying Location...');
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, SCHOOL_COORDS.lat, SCHOOL_COORDS.lng);
@@ -332,6 +341,7 @@ function App() {
           });
           alert("Attendance Marked!"); 
           setStatus('Done');
+          setTeacherSummary(prev => ({ ...prev, attendanceMarked: true }));
           addNotification("Attendance marked successfully", "success");
         } else { 
           alert(`Too far! ${Math.round(dist)}m.`); 
@@ -379,15 +389,11 @@ function App() {
         const todayStudAtt = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
         const todayTeachAtt = await getDocs(query(collection(db, "teacher_attendance"), where("date", "==", today)));
         const pendingLeavesSnap = await getDocs(query(collection(db, "teacher_leaves"), where("status", "==", "pending")));
-        
         let studentAttendanceCount = 0;
         todayStudAtt.docs.forEach(doc => {
           const data = doc.data().attendance_data;
-          if (data) {
-            studentAttendanceCount += Object.values(data).filter(v => v === 'P').length;
-          }
+          if (data) studentAttendanceCount += Object.values(data).filter(v => v === 'P').length;
         });
-
         setAdminAnalytics({
           totalStudents: snap.size,
           totalStaff: staffSnap.size,
@@ -396,6 +402,23 @@ function App() {
           pendingLeaves: pendingLeavesSnap.size
         });
       } catch (err) { console.error("Analytics fetch failed", err); }
+    }
+
+    if (userRole === 'staff') {
+      // Teacher specific dynamic summary
+      const todayClasses = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
+      const myAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today)));
+      const myPendingLeaves = await getDocs(query(collection(db, "teacher_leaves"), where("name", "==", staffName), where("status", "==", "pending")));
+      setTeacherSummary({
+        todayClasses: todayClasses.size,
+        attendanceMarked: !myAtt.empty,
+        pendingLeaves: myPendingLeaves.size
+      });
+      // Mock system messages extension
+      setSystemMessages([
+        { id: 1, text: "Reminder: Please complete student attendance by 9:00 AM.", type: 'notice' },
+        { id: 2, text: "Admin: Monthly staff meeting scheduled for Saturday.", type: 'admin' }
+      ]);
     }
   };
 
@@ -424,11 +447,9 @@ function App() {
         distance: "N/A",
         status: "Absent (Auto Detected)"
       }));
-    
     return [...presentList, ...absentList];
   };
 
-  // --- ADMIN DELETE LOGIC ---
   const requestDelete = (record) => {
     if(userRole !== 'admin') return alert("Access Denied: Admin Only");
     setRecordToDelete(record);
@@ -439,7 +460,6 @@ function App() {
   const confirmFinalDelete = async () => {
     if (userRole !== 'admin') return;
     if (deleteConfirmText !== "DELETE") return alert("Please type DELETE to confirm.");
-    
     setIsDeleting(true);
     try {
       await deleteDoc(doc(db, "daily_attendance", recordToDelete.id));
@@ -455,6 +475,31 @@ function App() {
     }
   };
 
+  // Extension: Mini Calendar Component
+  const MiniCalendar = () => {
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const currentDay = now.getDate();
+    return (
+      <div style={{ background: '#fff', borderRadius: '15px', padding: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#1a4a8e', textAlign: 'center' }}>
+          {now.toLocaleString('default', { month: 'long' })} {now.getFullYear()}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+          {[...Array(daysInMonth)].map((_, i) => (
+            <div key={i} style={{ 
+              fontSize: '10px', padding: '4px', textAlign: 'center', borderRadius: '4px',
+              backgroundColor: (i + 1) === currentDay ? '#f39c12' : '#f0f2f5',
+              color: (i + 1) === currentDay ? '#fff' : '#333'
+            }}>
+              {i + 1}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', background:'white', padding:'5px' }} />
@@ -467,41 +512,19 @@ function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
       
-      {/* ADMIN DELETE CONFIRMATION MODAL */}
       {isDeleteModalOpen && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.85)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', boxSizing:'border-box' }}>
             <div style={{ background:'white', width:'100%', maxWidth:'400px', borderRadius:'15px', padding:'20px', textAlign:'center' }}>
                 <h3 style={{color:'#e74c3c', marginTop:0}}>⚠️ Critical Warning</h3>
                 <p style={{fontSize:'14px', color:'#444', lineHeight:'1.5'}}>Are you sure you want to delete this record? This action cannot be undone.</p>
-                
                 <div style={{background:'#f8f9fa', padding:'10px', borderRadius:'8px', margin:'15px 0', fontSize:'13px', border:'1px solid #eee'}}>
-                    <b>Class:</b> {recordToDelete?.class}<br/>
-                    <b>Date:</b> {recordToDelete?.date}
+                    <b>Class:</b> {recordToDelete?.class}<br/><b>Date:</b> {recordToDelete?.date}
                 </div>
-
                 <p style={{fontSize:'12px', color:'#666', marginBottom:'10px'}}>Type <b>DELETE</b> to confirm:</p>
-                <input 
-                    type="text" 
-                    value={deleteConfirmText} 
-                    onChange={(e) => setDeleteConfirmText(e.target.value)} 
-                    placeholder="DELETE"
-                    style={{...inputStyle, textAlign:'center', borderColor:'#e74c3c', color:'#e74c3c', fontWeight:'bold'}}
-                />
-
+                <input type="text" value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} placeholder="DELETE" style={{...inputStyle, textAlign:'center', borderColor:'#e74c3c', color:'#e74c3c', fontWeight:'bold'}} />
                 <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
-                    <button 
-                        disabled={deleteConfirmText !== "DELETE" || isDeleting}
-                        onClick={confirmFinalDelete}
-                        style={{...actionBtn, background: deleteConfirmText === "DELETE" ? '#e74c3c' : '#ccc', flex:1, fontSize:'14px'}}
-                    >
-                        {isDeleting ? "Deleting..." : "Confirm Permanent Delete"}
-                    </button>
-                    <button 
-                        onClick={() => setIsDeleteModalOpen(false)}
-                        style={{...actionBtn, background:'#7f8c8d', flex:1, fontSize:'14px'}}
-                    >
-                        Cancel
-                    </button>
+                    <button disabled={deleteConfirmText !== "DELETE" || isDeleting} onClick={confirmFinalDelete} style={{...actionBtn, background: deleteConfirmText === "DELETE" ? '#e74c3c' : '#ccc', flex:1, fontSize:'14px'}}>{isDeleting ? "Deleting..." : "Confirm Permanent Delete"}</button>
+                    <button onClick={() => setIsDeleteModalOpen(false)} style={{...actionBtn, background:'#7f8c8d', flex:1, fontSize:'14px'}}>Cancel</button>
                 </div>
             </div>
         </div>
@@ -514,25 +537,19 @@ function App() {
               <h3 style={{margin:0, fontSize:'16px'}}>📊 CSV Data Preview</h3>
               <button onClick={() => setShowPreview(false)} style={{ background:'none', border:'none', color:'white', fontSize:'20px', cursor:'pointer' }}>×</button>
             </div>
-            
             <div style={{ padding:'15px', overflowX:'auto', flex:1 }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                 <thead>
-                  <tr style={{ background:'#f0f2f5' }}>
-                    {previewHeaders.map(h => <th key={h} style={{ padding:'10px', border:'1px solid #ddd', textAlign:'left', textTransform:'capitalize' }}>{h.replace('_',' ')}</th>)}
-                  </tr>
+                  <tr style={{ background:'#f0f2f5' }}>{previewHeaders.map(h => <th key={h} style={{ padding:'10px', border:'1px solid #ddd', textAlign:'left', textTransform:'capitalize' }}>{h.replace('_',' ')}</th>)}</tr>
                 </thead>
                 <tbody>
                   {previewData.slice(0, 50).map((row, idx) => (
-                    <tr key={idx} style={{ background: idx % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-                      {previewHeaders.map(h => <td key={h} style={{ padding:'8px', border:'1px solid #ddd' }}>{row[h]}</td>)}
-                    </tr>
+                    <tr key={idx} style={{ background: idx % 2 === 0 ? '#fff' : '#f9f9f9' }}>{previewHeaders.map(h => <td key={h} style={{ padding:'8px', border:'1px solid #ddd' }}>{row[h]}</td>)}</tr>
                   ))}
                 </tbody>
               </table>
               {previewData.length > 50 && <p style={{ textAlign:'center', fontSize:'11px', color:'#666', marginTop:'10px' }}>Showing first 50 of {previewData.length} records...</p>}
             </div>
-
             <div style={{ padding:'15px', borderTop:'1px solid #ddd', display:'flex', gap:'10px' }}>
               <button onClick={() => downloadCSV(previewData, previewHeaders, previewFileName)} style={{ ...actionBtn, flex:1, background:'#2ecc71' }}>Confirm Download CSV</button>
               <button onClick={() => setShowPreview(false)} style={{ ...actionBtn, flex:1, background:'#e74c3c' }}>Cancel</button>
@@ -564,19 +581,10 @@ function App() {
       )}
 
       <div style={{ backgroundColor: '#1a4a8e', padding: '15px 10px', textAlign: 'center', color:'white', position: 'relative' }}>
-        
-        <div 
-          onClick={() => setShowNotifPanel(!showNotifPanel)}
-          style={{ position: 'absolute', top: '15px', right: '20px', cursor: 'pointer', padding: '5px' }}
-        >
+        <div onClick={() => setShowNotifPanel(!showNotifPanel)} style={{ position: 'absolute', top: '15px', right: '20px', cursor: 'pointer', padding: '5px' }}>
           <span style={{ fontSize: '20px' }}>🔔</span>
-          {notifications.length > 0 && (
-            <span style={{ position: 'absolute', top: '0', right: '0', background: 'red', color: 'white', fontSize: '9px', borderRadius: '50%', width: '15px', height: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-              {notifications.length}
-            </span>
-          )}
+          {notifications.length > 0 && <span style={{ position: 'absolute', top: '0', right: '0', background: 'red', color: 'white', fontSize: '9px', borderRadius: '50%', width: '15px', height: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{notifications.length}</span>}
         </div>
-
         <h3 style={{margin:0}}>DAR-E-ARQAM (ALI CAMPUS)</h3>
         {userRole === 'staff' && <div style={{background:'rgba(255,255,255,0.2)', padding:'5px', borderRadius:'8px', fontSize:'12px', marginTop:'5px'}}>Teacher: {staffName}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop:'15px', background:'#f0f2f5', padding:'10px', borderRadius:'15px' }}>
@@ -608,27 +616,72 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
         
+        {/* TEACHER DASHBOARD EXTENSIONS */}
+        {userRole === 'staff' && view === 'dashboard' && (
+          <div>
+            <div style={{ ...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h4 style={{ margin: 0 }}>📅 Today Summary</h4>
+                <small style={{ opacity: 0.8 }}>{today}</small>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.1)', padding: '8px', borderRadius: '8px' }}>
+                  <small style={{ fontSize: '10px', display: 'block' }}>Today's Classes</small>
+                  <b>{teacherSummary.todayClasses}</b>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.1)', padding: '8px', borderRadius: '8px' }}>
+                  <small style={{ fontSize: '10px', display: 'block' }}>Attendance</small>
+                  <b>{teacherSummary.attendanceMarked ? "✅ Marked" : "❌ Pending"}</b>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ ...cardStyle, borderLeft: '6px solid #e74c3c' }}>
+              <h4 style={{ marginTop: 0, fontSize: '14px' }}>⚠️ Pending Tasks</h4>
+              {!teacherSummary.attendanceMarked && <div style={{ fontSize: '12px', color: '#e74c3c', marginBottom: '5px' }}>• Your attendance is not marked today.</div>}
+              {teacherSummary.pendingLeaves > 0 && <div style={{ fontSize: '12px', color: '#f39c12', marginBottom: '5px' }}>• You have {teacherSummary.pendingLeaves} leave request(s) awaiting approval.</div>}
+              {teacherSummary.attendanceMarked && teacherSummary.pendingLeaves === 0 && <div style={{ fontSize: '12px', color: '#2ecc71' }}>No urgent tasks pending!</div>}
+            </div>
+
+            <div style={{ ...cardStyle, borderLeft: '6px solid #9b59b6', fontStyle: 'italic', fontSize: '13px', textAlign: 'center' }}>
+              "{dailyQuote}"
+            </div>
+
+            <div style={{ ...cardStyle, borderLeft: '6px solid #3498db' }}>
+              <h4 style={{ marginTop: 0, fontSize: '14px' }}>📢 System Notices</h4>
+              {systemMessages.map(m => (
+                <div key={m.id} style={{ fontSize: '11px', background: '#f8f9fa', padding: '6px', borderRadius: '6px', marginBottom: '4px', borderLeft: '3px solid #3498db' }}>
+                  {m.text}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginBottom: '15px' }}>
+              <MiniCalendar />
+            </div>
+
+            <div style={{ ...cardStyle, borderLeft: '6px solid #1a4a8e' }}>
+              <h4 style={{ marginTop: 0, fontSize: '14px' }}>🚀 Quick Class Switch</h4>
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                {CLASSES.slice(0, 5).map(c => (
+                  <button key={c} onClick={() => { setFilterClass(c); setView('sel_att'); }} style={{ padding: '6px 10px', fontSize: '10px', background: '#e8f0fe', border: '1px solid #1a4a8e', borderRadius: '5px', color: '#1a4a8e', cursor: 'pointer' }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {userRole === 'admin' && view === 'dashboard' && (
           <>
             <div style={{...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12'}}>
               <h4 style={{marginTop: 0, marginBottom: '10px', display: 'flex', alignItems: 'center'}}>📊 Admin Overview Panel</h4>
               <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                  <small style={{display: 'block', opacity: 0.8}}>Total Students</small>
-                  <b style={{fontSize: '18px'}}>{adminAnalytics.totalStudents}</b>
-                </div>
-                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                  <small style={{display: 'block', opacity: 0.8}}>Total Staff</small>
-                  <b style={{fontSize: '18px'}}>{adminAnalytics.totalStaff}</b>
-                </div>
-                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                  <small style={{display: 'block', opacity: 0.8}}>Today Stud. Present</small>
-                  <b style={{fontSize: '18px'}}>{adminAnalytics.todayStudentAttendance}</b>
-                </div>
-                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}>
-                  <small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small>
-                  <b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b>
-                </div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Total Students</small><b style={{fontSize: '18px'}}>{adminAnalytics.totalStudents}</b></div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Total Staff</small><b style={{fontSize: '18px'}}>{adminAnalytics.totalStaff}</b></div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Today Stud. Present</small><b style={{fontSize: '18px'}}>{adminAnalytics.todayStudentAttendance}</b></div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small><b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b></div>
                 <div onClick={async () => {
                    const sRec = await getDocs(collection(db, "staff_records"));
                    setStaffRecords(sRec.docs.map(d => ({id: d.id, ...d.data()})));
@@ -638,31 +691,16 @@ function App() {
                    setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
                    setView('teacher_attendance_view');
                 }} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer'}}>
-                  <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small>
-                  <b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
+                  <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small><b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
                 </div>
               </div>
             </div>
-
             <div style={{...cardStyle, borderLeft: '6px solid #9b59b6'}}>
               <h4 style={{marginTop:0}}>🛡️ Data Protection</h4>
               <button onClick={handleDownloadBackup} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#9b59b6'}}>Download Full Backup (JSON)</button>
-              
-              <input 
-                type="file" 
-                accept=".json" 
-                onChange={handleRestoreBackup} 
-                style={{display: 'none'}} 
-                ref={fileInputRef} 
-              />
-              <button 
-                onClick={() => fileInputRef.current.click()} 
-                style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#34495e'}}
-              >
-                Upload Backup & Restore
-              </button>
+              <input type="file" accept=".json" onChange={handleRestoreBackup} style={{display: 'none'}} ref={fileInputRef} />
+              <button onClick={() => fileInputRef.current.click()} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#34495e'}}>Upload Backup & Restore</button>
             </div>
-
             <div style={cardStyle}>
               <h4 style={{marginTop:0}}>📥 Data Backup (CSV)</h4>
               <button onClick={handleExportStudents} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px'}}>Download Students CSV</button>
@@ -676,17 +714,9 @@ function App() {
           <div>
             <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
               <h3 style={{marginTop:0}}>📇 Teacher Directory</h3>
-              <input 
-                placeholder="Search Teacher Name..." 
-                value={dirSearch} 
-                onChange={(e) => setDirSearch(e.target.value)} 
-                style={{...inputStyle, marginBottom:0}} 
-              />
+              <input placeholder="Search Teacher Name..." value={dirSearch} onChange={(e) => setDirSearch(e.target.value)} style={{...inputStyle, marginBottom:0}} />
             </div>
-            
-            {teacherDirectory
-              .filter(t => t.name?.toLowerCase().includes(dirSearch.toLowerCase()))
-              .map(t => (
+            {teacherDirectory.filter(t => t.name?.toLowerCase().includes(dirSearch.toLowerCase())).map(t => (
                 <div key={t.id} style={cardStyle}>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
                     <div>
@@ -694,16 +724,7 @@ function App() {
                       <div style={{color:'#666', fontSize:'14px'}}>{t.role}</div>
                       {t.whatsapp && <div style={{fontSize:'12px', color:'#999', marginTop:'5px'}}>📞 {t.whatsapp}</div>}
                     </div>
-                    {t.whatsapp && (
-                      <a 
-                        href={`https://wa.me/${t.whatsapp}`} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        style={{textDecoration:'none', background:'#25D366', color:'white', padding:'8px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:'bold', display:'flex', alignItems:'center', gap:'5px'}}
-                      >
-                        <span>🟢</span> Chat
-                      </a>
-                    )}
+                    {t.whatsapp && <a href={`https://wa.me/${t.whatsapp}`} target="_blank" rel="noreferrer" style={{textDecoration:'none', background:'#25D366', color:'white', padding:'8px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:'bold', display:'flex', alignItems:'center', gap:'5px'}}><span>🟢</span> Chat</a>}
                   </div>
                 </div>
             ))}
@@ -715,8 +736,7 @@ function App() {
           <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
             <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
             <p style={{fontSize:'10px', color:'#666', marginTop:'5px'}}>Range: 500m | Status: {status}</p>
-            <button 
-              onClick={async () => {
+            <button onClick={async () => {
                 try {
                   if (!myProfileData && staffName) {
                     const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
@@ -732,11 +752,7 @@ function App() {
                   setMyLeaveRecords(leaveSnap.docs.map(d => d.data()));
                   setView('teacher_profile_view');
                 } catch (err) { alert("Error loading profile."); }
-              }}
-              style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}
-            >
-              👤 View My Profile
-            </button>
+              }} style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}>👤 View My Profile</button>
             <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
                <button onClick={() => setView('apply_leave')} style={{ flex:1, padding:'12px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📄 Apply Leave</button>
                <button onClick={async () => {
@@ -760,9 +776,7 @@ function App() {
             <button onClick={async () => {
               if(!leaveFrom || !leaveTo || !leaveReason) return alert("Fill all fields");
               try {
-                await addDoc(collection(db, "teacher_leaves"), {
-                  name: staffName, fromDate: leaveFrom, toDate: leaveTo, reason: leaveReason, status: "pending", appliedAt: serverTimestamp()
-                });
+                await addDoc(collection(db, "teacher_leaves"), { name: staffName, fromDate: leaveFrom, toDate: leaveTo, reason: leaveReason, status: "pending", appliedAt: serverTimestamp() });
                 alert("Leave application submitted!");
                 addNotification("Leave request submitted successfully", "success");
                 setLeaveFrom(''); setLeaveTo(''); setLeaveReason(''); setView('dashboard');
@@ -795,22 +809,16 @@ function App() {
               <h2 style={{margin:0, color:'#1a4a8e'}}>{(myProfileData || selectedTeacherProfile).name}</h2>
               <p style={{color:'#666', margin:'5px 0'}}>Role: {(myProfileData || selectedTeacherProfile).role}</p>
               { (myProfileData || selectedTeacherProfile).salary && <p style={{color:'#666', margin:'5px 0'}}>Salary/Pay: {(myProfileData || selectedTeacherProfile).salary}</p> }
-              
               <div style={{marginTop:'10px', padding:'10px', background:'#f8f9fa', borderRadius:'8px', fontSize:'13px'}}>
                 <strong>Attendance Summary:</strong><br/>
-                Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | 
-                Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave} | 
-                Absent: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalAbsent}
+                Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave} | Absent: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalAbsent}
               </div>
-
-              <button 
-                onClick={async () => {
+              <button onClick={async () => {
                    const currentStaffName = (myProfileData || selectedTeacherProfile).name;
                    const qApproved = query(collection(db, "teacher_leaves"), where("name", "==", currentStaffName), where("status", "==", "approved"));
                    const leaveSnap = await getDocs(qApproved);
                    const approvedLeaveCount = leaveSnap.size;
                    const presentCount = (userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).length;
-                   
                    const reportBody = [
                      ["--- SECTION 1: TEACHER INFO ---", "", "", ""],
                      ["Name:", currentStaffName, "Role:", (myProfileData || selectedTeacherProfile).role],
@@ -824,31 +832,16 @@ function App() {
                      ["Name", "Date", "Time", "Distance"],
                      ...(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map(r => [currentStaffName, r.date, r.time, r.distance])
                    ];
-
-                   downloadPDF(
-                     "Teacher Professional Report", 
-                     ["Field", "Value", "Field", "Value"], 
-                     reportBody, 
-                     `${currentStaffName}_Report`
-                   );
-                }}
-                style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}
-              >
-                Download My Profile PDF
-              </button>
+                   downloadPDF("Teacher Professional Report", ["Field", "Value", "Field", "Value"], reportBody, `${currentStaffName}_Report`);
+                }} style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}>Download My Profile PDF</button>
             </div>
-
             <h4 style={{marginTop:'20px'}}>Attendance History</h4>
             {(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map((r, idx) => (
               <div key={idx} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', toggleStat:'bold'}}>
-                  <b>{r.date}</b>
-                  <span>{r.time}</span>
-                </div>
+                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}><b>{r.date}</b><span>{r.time}</span></div>
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📍 Distance: {r.distance}</div>
               </div>
             ))}
-            
             <button onClick={() => setView(userRole === 'admin' ? 'teacher_attendance_view' : 'dashboard')} style={{...actionBtn, marginTop:'10px', background:'#7f8c8d'}}>Back</button>
           </div>
         )}
@@ -882,20 +875,11 @@ function App() {
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <select value={selectedSection} onChange={(e)=>setSelectedSection(e.target.value)} style={inputStyle}>
-              <option value="">No Section (General)</option>
-              {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+              <option value="">No Section (General)</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
             </select>
             <button onClick={async () => {
               if(!name || !rollNo) return alert("Fill Name and Roll Number");
-              const d = { 
-                student_name:name, 
-                roll_number:rollNo, 
-                parent_whatsapp:whatsapp, 
-                class:selectedClass, 
-                section:selectedSection, 
-                base_fee:Number(baseFee), 
-                arrears:Number(arrears) 
-              };
+              const d = { student_name:name, roll_number:rollNo, parent_whatsapp:whatsapp, class:selectedClass, section:selectedSection, base_fee:Number(baseFee), arrears:Number(arrears) };
               try {
                 if (editingStudent) {
                    await updateDoc(doc(db,"ali_campus_records",editingStudent.id), d);
@@ -914,34 +898,17 @@ function App() {
           <div>
             <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
                 <h4 style={{margin:'0 0 10px 0'}}>Smart Filter</h4>
-                <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
-                    <input placeholder="Search Name or Roll No..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, margin:0}} />
-                </div>
+                <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}><input placeholder="Search Name or Roll No..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, margin:0}} /></div>
                 <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
-                    <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'120px'}}>
-                        <option value="All">All Classes</option>
-                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'100px'}}>
-                        <option value="All">All Sections</option>
-                        <option value="General">General</option>
-                        {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
-                    </select>
+                    <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'120px'}}><option value="All">All Classes</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                    <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'100px'}}><option value="All">All Sections</option><option value="General">General</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}</select>
                     <button onClick={() => { setSearchQuery(''); setClassFilter('All'); setFilterSection('All'); }} style={{background:'#7f8c8d', color:'white', border:'none', borderRadius:'10px', padding:'10px 15px', fontWeight:'bold', width:'100%', marginTop:'5px'}}>Clear Filters</button>
                 </div>
             </div>
-
             {getFilteredRecords().map(r => (
               <div key={r.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                  <span><b>{r.student_name}</b> ({r.roll_number})</span>
-                  <a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{textDecoration:'none', color:'#25D366', fontWeight:'bold'}}>
-                    <span style={{fontSize:'16px'}}>🟢</span> WhatsApp
-                  </a>
-                </div>
-                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
-                   {r.class} {r.section ? `- Section ${r.section}` : ''} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}
-                </div>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><span><b>{r.student_name}</b> ({r.roll_number})</span><a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{textDecoration:'none', color:'#25D366', fontWeight:'bold'}}><span style={{fontSize:'16px'}}>🟢</span> WhatsApp</a></div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>{r.class} {r.section ? `- Section ${r.section}` : ''} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}</div>
                 <div style={{marginTop:'10px'}}>
                   <button onClick={()=>{setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp); setBaseFee(r.base_fee); setArrears(r.arrears); setSelectedSection(r.section || ''); setView('add');}} style={{background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', marginRight:'10px'}}>Edit</button>
                   <button onClick={async ()=>{if(window.confirm("Delete?")){await deleteDoc(doc(db,"ali_campus_records",r.id)); addNotification(`Deleted student: ${r.student_name}`, "warning"); setView('dashboard');}}} style={{background:'#e74c3c', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px'}}>Delete</button>
@@ -954,61 +921,33 @@ function App() {
         {view === 'attendance' && (
           <div>
             <h3 style={{textAlign:'center', margin:'0 0 5px 0'}}>{filterClass} - {today}</h3>
-            
             <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e', padding:'10px', marginBottom:'15px'}}>
-               <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0}}>
-                  <option value="All">All Students ({filterClass})</option>
-                  <option value="General">General (No Section)</option>
-                  {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
-               </select>
+               <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0}}><option value="All">All Students ({filterClass})</option><option value="General">General (No Section)</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}</select>
                <input placeholder="Find Student in List..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, marginTop:'10px', marginBottom:0}}/>
             </div>
-
             {getFilteredRecords().map(r => (
               <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div>
-                    <div style={{fontWeight:'bold'}}>{r.student_name} {r.section ? <small style={{color:'#1a4a8e', background:'#e8f0fe', padding:'2px 5px', borderRadius:'4px'}}>Sec {r.section}</small> : ''}</div>
-                    <div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div>
-                </div>
+                <div><div style={{fontWeight:'bold'}}>{r.student_name} {r.section ? <small style={{color:'#1a4a8e', background:'#e8f0fe', padding:'2px 5px', borderRadius:'4px'}}>Sec {r.section}</small> : ''}</div><div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div></div>
                 <div>
                   <button onClick={()=>setAttendance({...attendance, [r.id]:'P'})} style={{background:attendance[r.id]==='P'?'#2ecc71':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', marginRight:'5px'}}>P</button>
                   <button onClick={()=>setAttendance({...attendance, [r.id]:'A'})} style={{background:attendance[r.id]==='A'?'#e74c3c':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px'}}>A</button>
                 </div>
               </div>
             ))}
-            
             <button onClick={async ()=>{
               try {
-                const qCheck = query(
-                  collection(db, "daily_attendance"), 
-                  where("class", "==", filterClass), 
-                  where("section_filter", "==", filterSection), 
-                  where("date", "==", today)
-                );
+                const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("section_filter", "==", filterSection), where("date", "==", today));
                 const checkSnap = await getDocs(qCheck);
-                
-                const attendancePayload = {
-                  class: filterClass, 
-                  section_filter: filterSection, 
-                  date: today, 
-                  attendance_data: attendance, 
-                  timestamp: serverTimestamp()
-                };
-
+                const attendancePayload = { class: filterClass, section_filter: filterSection, date: today, attendance_data: attendance, timestamp: serverTimestamp() };
                 if (!checkSnap.empty) {
-                  const existingDocId = checkSnap.docs[0].id;
-                  await updateDoc(doc(db, "daily_attendance", existingDocId), attendancePayload);
+                  await updateDoc(doc(db, "daily_attendance", checkSnap.docs[0].id), attendancePayload);
                   addNotification(`Attendance updated for ${filterClass} (${filterSection})`, "success");
                 } else {
                   await addDoc(collection(db, "daily_attendance"), attendancePayload);
                   addNotification(`Attendance submitted for ${filterClass} (${filterSection})`, "success");
                 }
-                
-                alert("Attendance Saved!"); 
-                setView('dashboard'); setAttendance({}); setSearchQuery(''); setFilterSection('All');
-              } catch (e) {
-                alert("Error saving attendance");
-              }
+                alert("Attendance Saved!"); setView('dashboard'); setAttendance({}); setSearchQuery(''); setFilterSection('All');
+              } catch (e) { alert("Error saving attendance"); }
             }} style={actionBtn}>Submit Attendance</button>
           </div>
         )}
@@ -1021,17 +960,8 @@ function App() {
             </div>
             {history.map(h => (
               <div key={h.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div>
-                    <b>{h.date}</b> - {h.class} {h.section_filter && h.section_filter !== 'All' ? `(${h.section_filter})` : ''}
-                </div>
-                {userRole === 'admin' && (
-                    <button 
-                        onClick={() => requestDelete(h)}
-                        style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold', cursor:'pointer'}}
-                    >
-                        Delete
-                    </button>
-                )}
+                <div><b>{h.date}</b> - {h.class} {h.section_filter && h.section_filter !== 'All' ? `(${h.section_filter})` : ''}</div>
+                {userRole === 'admin' && <button onClick={() => requestDelete(h)} style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold', cursor:'pointer'}}>Delete</button>}
               </div>
             ))}
           </div>
@@ -1043,31 +973,15 @@ function App() {
               <h3 style={{margin:0}}>Teacher Attendance</h3>
               <button onClick={() => {
                 const list = getUnifiedTeacherAttendanceList();
-                downloadPDF(
-                  "Teacher Attendance & Absence Report", 
-                  ["Teacher Name", "Date", "Status/Time", "Distance"], 
-                  list.map(t => [t.name, t.date, t.time || "❌ Absent (Auto)", t.distance]), 
-                  "Teacher_Attendance_Report"
-                );
+                downloadPDF("Teacher Attendance & Absence Report", ["Teacher Name", "Date", "Status/Time", "Distance"], list.map(t => [t.name, t.date, t.time || "❌ Absent (Auto)", t.distance]), "Teacher_Attendance_Report");
               }} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
             </div>
             <input type="date" value={tAttSearchDate} onChange={(e)=>setTAttSearchDate(e.target.value)} style={inputStyle} placeholder="Filter by Date" />
-            
             {getUnifiedTeacherAttendanceList().map(t => (
               <div key={t.id} style={{...cardStyle, borderLeft: t.time ? '6px solid #2ecc71' : '6px solid #e74c3c'}}>
-                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}>
-                  <span>{t.name}</span>
-                  <span style={{color: t.time ? '#1a4a8e' : '#e74c3c'}}>
-                    {t.time ? t.time : "❌ Absent (Auto Detected)"}
-                  </span>
-                </div>
-                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
-                   📅 {t.date} | 📍 Dist: {t.distance}
-                </div>
-                
-                {t.time && (
-                  <button 
-                    onClick={async () => {
+                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}><span>{t.name}</span><span style={{color: t.time ? '#1a4a8e' : '#e74c3c'}}>{t.time ? t.time : "❌ Absent (Auto Detected)"}</span></div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📅 {t.date} | 📍 Dist: {t.distance}</div>
+                {t.time && <button onClick={async () => {
                       try {
                         const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
                         const staffSnap = await getDocs(qStaff);
@@ -1077,51 +991,17 @@ function App() {
                         const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                         setSelectedTeacherProfile(staffData);
                         setTeacherProfileRecords(sortedAtt);
-                        setMyProfileData(null); 
-                        setView('teacher_profile_view');
+                        setMyProfileData(null); setView('teacher_profile_view');
                       } catch (err) { alert("Error loading profile."); }
-                    }} 
-                    style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}
-                  >
-                    View Profile
-                  </button>
-                )}
+                    }} style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}>View Profile</button>}
               </div>
             ))}
-
-            <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/>
-            <h3 style={{color:'#1a4a8e'}}>Teacher Leave Applications</h3>
+            <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/><h3 style={{color:'#1a4a8e'}}>Teacher Leave Applications</h3>
             {allLeaves.map(l => (
               <div key={l.id} style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
-                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
-                    <div>
-                      <b style={{fontSize:'16px'}}>{l.name}</b>
-                      <div style={{fontSize:'12px', color:'#666'}}>{l.fromDate} → {l.toDate}</div>
-                    </div>
-                    <span style={{padding:'4px 8px', borderRadius:'5px', fontSize:'10px', fontWeight:'bold', background: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12', color:'white'}}>
-                      {l.status.toUpperCase()}
-                    </span>
-                 </div>
+                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}><div><b>{l.name}</b><div style={{fontSize:'12px', color:'#666'}}>{l.fromDate} → {l.toDate}</div></div><span style={{padding:'4px 8px', borderRadius:'5px', fontSize:'10px', fontWeight:'bold', background: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12', color:'white'}}>{l.status.toUpperCase()}</span></div>
                  <p style={{fontSize:'13px', color:'#333', background:'#f9f9f9', padding:'8px', borderRadius:'5px', margin:'10px 0'}}>{l.reason}</p>
-                 
-                 {l.status === 'pending' && (
-                   <div style={{display:'flex', gap:'10px'}}>
-                      <button onClick={async () => {
-                        await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'approved' });
-                        alert("Approved!");
-                        addNotification(`Approved leave for ${l.name}`, "success");
-                        setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'approved'} : item));
-                        fetchStats();
-                      }} style={{flex:1, background:'#2ecc71', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>✅ Approve</button>
-                      <button onClick={async () => {
-                        await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'rejected' });
-                        alert("Rejected!");
-                        addNotification(`Rejected leave for ${l.name}`, "warning");
-                        setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'rejected'} : item));
-                        fetchStats();
-                      }} style={{flex:1, background:'#e74c3c', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>❌ Reject</button>
-                   </div>
-                 )}
+                 {l.status === 'pending' && <div style={{display:'flex', gap:'10px'}}><button onClick={async () => { await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'approved' }); addNotification(`Approved leave for ${l.name}`, "success"); setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'approved'} : item)); fetchStats(); }} style={{flex:1, background:'#2ecc71', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>✅ Approve</button><button onClick={async () => { await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'rejected' }); addNotification(`Rejected leave for ${l.name}`, "warning"); setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'rejected'} : item)); fetchStats(); }} style={{flex:1, background:'#e74c3c', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>❌ Reject</button></div>}
               </div>
             ))}
           </div>
@@ -1129,14 +1009,8 @@ function App() {
 
         {view === 'monthly_report' && (
           <div style={cardStyle}>
-             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
-               <h4 style={{margin:0}}>{filterClass} Report</h4>
-               <button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
-             </div>
-             <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
-               <thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead>
-               <tbody>{monthlyData.map(([info, s])=>(<tr key={info.name} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'8px'}}>{info.roll} - {info.name}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody>
-             </table>
+             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}><h4 style={{margin:0}}>{filterClass} Report</h4><button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button></div>
+             <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}><thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead><tbody>{monthlyData.map(([info, s])=>(<tr key={info.name} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'8px'}}>{info.roll} - {info.name}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody></table>
              <button onClick={()=>setView('dashboard')} style={{...actionBtn, marginTop:'15px'}}>Back Home</button>
           </div>
         )}
@@ -1147,13 +1021,11 @@ function App() {
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
             {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
             <button onClick={async ()=> {
-              setMonthlyData([]); setRecords([]);
-              setFilterSection('All'); 
+              setMonthlyData([]); setRecords([]); setFilterSection('All'); 
               const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
               const recSnap = await getDocs(qRec);
               const studentMap = {};
               recSnap.docs.forEach(d => { studentMap[d.id] = { name: d.data().student_name, roll: d.data().roll_number }; });
-              
               if(view==='sel_report') {
                 const q = query(collection(db, "daily_attendance"), where("class", "==", filterClass));
                 const snap = await getDocs(q);
@@ -1183,13 +1055,9 @@ function App() {
           <div>
             <div style={cardStyle}>
               <h3>Add New Staff</h3>
-              <input placeholder="Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle}/>
-              <input placeholder="Role" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle}/>
-              <input placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle}/>
-              <input placeholder="Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle}/>
+              <input placeholder="Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle}/><input placeholder="Role" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle}/><input placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle}/><input placeholder="Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle}/>
               <button onClick={async ()=>{
                 await addDoc(collection(db, "staff_records"), {name:sName, role:sRole, salary:sSalary, password:sPass});
-                alert("Staff Added");
                 addNotification(`Staff added: ${sName}`, "success");
                 const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d => ({ id: d.id, ...d.data() })));
                 setSName(''); setSRole(''); setSSalary(''); setSPass('');
@@ -1197,10 +1065,7 @@ function App() {
             </div>
             {staffRecords.map(s => (
               <div key={s.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                   <b>{s.name}</b>
-                   <button onClick={async ()=>{if(window.confirm("Remove staff?")) { await deleteDoc(doc(db, "staff_records", s.id)); addNotification(`Removed: ${s.name}`, "warning"); const snap = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }}} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button>
-                </div>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><b>{s.name}</b><button onClick={async ()=>{if(window.confirm("Remove staff?")) { await deleteDoc(doc(db, "staff_records", s.id)); addNotification(`Removed: ${s.name}`, "warning"); const snap = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }}} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button></div>
                 <div style={{fontSize:'12px', color:'#666'}}>Role: {s.role} | PWD: {s.password}</div>
               </div>
             ))}
