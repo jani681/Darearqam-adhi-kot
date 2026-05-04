@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc, writeBatch } from "firebase/firestore"; 
+import { RecaptchaVerifier, signInWithPhoneNumber, signInWithEmailAndPassword } from "firebase/auth";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -34,6 +35,14 @@ function App() {
   const [status, setStatus] = useState('Online');
   const [classStats, setClassStats] = useState({});
   
+  // Login Specific States
+  const [loginTab, setLoginTab] = useState('email'); // 'email' or 'phone'
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
   const [name, setName] = useState('');
   const [rollNo, setRollNo] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -87,7 +96,6 @@ function App() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // New Extension States
   const [dailyQuote, setDailyQuote] = useState('');
   const [teacherSummary, setTeacherSummary] = useState({ todayClasses: 0, attendanceMarked: false, pendingLeaves: 0 });
   const [systemMessages, setSystemMessages] = useState([]);
@@ -108,6 +116,96 @@ function App() {
     const quoteIndex = dayOfMonth % MOTIVATIONS.length;
     setDailyQuote(MOTIVATIONS[quoteIndex]);
   }, [today]);
+
+  // Auth Helper: Find staff by phone/email to set role
+  const authorizeUser = async (identifier, isPhone = false) => {
+    try {
+      const field = isPhone ? "whatsapp" : "password"; // Using password field for legacy match in base code or add email field
+      const q = query(collection(db, "staff_records"), where(field, "==", identifier));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        const teacherData = snap.docs[0].data();
+        setStaffName(teacherData.name);
+        setMyProfileData(teacherData);
+        setUserRole('staff');
+        setIsLoggedIn(true);
+        addNotification(`Welcome back, ${teacherData.name}`, "info");
+      } else {
+        setError("User record not found in system.");
+      }
+    } catch (e) {
+      setError("Authorization failed.");
+    }
+  };
+
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'invisible'
+      });
+    }
+  };
+
+  const handleSendOtp = async () => {
+    setError('');
+    if (!phoneNumber) return setError("Enter phone number");
+    setLoading(true);
+    try {
+      setupRecaptcha();
+      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, window.recaptchaVerifier);
+      setConfirmationResult(confirmation);
+      addNotification("OTP Sent Successfully", "info");
+    } catch (e) {
+      setError("Failed to send SMS. Check number format.");
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const result = await confirmationResult.confirm(otp);
+      // Success - check database for role
+      await authorizeUser(phoneNumber.replace('+', ''), true);
+    } catch (e) {
+      setError("Invalid OTP. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    setError('');
+    if (passInput === ADMIN_PASSWORD) { 
+      setUserRole('admin'); 
+      setIsLoggedIn(true); 
+      addNotification("Logged in as Admin", "info");
+      return; 
+    }
+    setLoading(true);
+    try {
+      const q = query(collection(db, "staff_records"), where("password", "==", passInput));
+      const snap = await getDocs(q);
+      if (!snap.empty) { 
+        const teacherData = snap.docs[0].data();
+        setStaffName(teacherData.name); 
+        setMyProfileData(teacherData); 
+        setUserRole('staff'); 
+        setIsLoggedIn(true); 
+        addNotification(`Welcome back, ${teacherData.name}`, "info");
+      } else {
+        setError("Wrong Password!");
+      }
+    } catch (e) { 
+      setError("Login Error"); 
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const addNotification = (msg, type = 'success') => {
     const newNotif = {
@@ -348,27 +446,6 @@ function App() {
     }
   };
 
-  const handleLogin = async () => {
-    if (passInput === ADMIN_PASSWORD) { 
-      setUserRole('admin'); 
-      setIsLoggedIn(true); 
-      addNotification("Logged in as Admin", "info");
-      return; 
-    }
-    try {
-      const q = query(collection(db, "staff_records"), where("password", "==", passInput));
-      const snap = await getDocs(q);
-      if (!snap.empty) { 
-        const teacherData = snap.docs[0].data();
-        setStaffName(teacherData.name); 
-        setMyProfileData(teacherData); 
-        setUserRole('staff'); 
-        setIsLoggedIn(true); 
-        addNotification(`Welcome back, ${teacherData.name}`, "info");
-      } else alert("Wrong Password!");
-    } catch (e) { alert("Login Error"); }
-  };
-
   const fetchStats = async () => {
     const snap = await getDocs(collection(db, "ali_campus_records"));
     const stats = {};
@@ -509,11 +586,86 @@ function App() {
   };
 
   if (!isLoggedIn) return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
-      <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', background:'white', padding:'5px' }} />
-      <h3>Ali Campus Login</h3>
-      <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', textAlign:'center'}} />
-      <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold'}}>LOGIN</button>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'100vh', backgroundColor:'#1a4a8e', color:'white', padding: '20px' }}>
+      <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', background:'white', padding:'5px', marginBottom: '20px' }} />
+      
+      <div style={{ background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '350px', color: '#333' }}>
+        <div style={{ display: 'flex', marginBottom: '20px', borderBottom: '2px solid #eee' }}>
+          <button 
+            onClick={() => { setLoginTab('email'); setError(''); }} 
+            style={{ flex: 1, padding: '10px', border: 'none', background: 'none', fontWeight: 'bold', color: loginTab === 'email' ? '#1a4a8e' : '#ccc', borderBottom: loginTab === 'email' ? '3px solid #1a4a8e' : 'none' }}>
+            Email/Pass
+          </button>
+          <button 
+            onClick={() => { setLoginTab('phone'); setError(''); }} 
+            style={{ flex: 1, padding: '10px', border: 'none', background: 'none', fontWeight: 'bold', color: loginTab === 'phone' ? '#1a4a8e' : '#ccc', borderBottom: loginTab === 'phone' ? '3px solid #1a4a8e' : 'none' }}>
+            Phone OTP
+          </button>
+        </div>
+
+        {error && <div style={{ background: '#f8d7da', color: '#721c24', padding: '10px', borderRadius: '8px', fontSize: '12px', marginBottom: '15px' }}>{error}</div>}
+
+        {loginTab === 'email' ? (
+          <div>
+             <input 
+              type="password" 
+              placeholder="Enter Password" 
+              value={passInput} 
+              onChange={(e)=>setPassInput(e.target.value)} 
+              style={{...inputStyle, textAlign:'center', border: '1px solid #ddd'}} 
+            />
+            <button 
+              disabled={loading}
+              onClick={handleLogin} 
+              style={{...actionBtn, background:'#f39c12', marginTop: '10px'}}>
+              {loading ? "Logging in..." : "LOGIN"}
+            </button>
+          </div>
+        ) : (
+          <div>
+            {!confirmationResult ? (
+              <>
+                <input 
+                  type="tel" 
+                  placeholder="+923001234567" 
+                  value={phoneNumber} 
+                  onChange={(e)=>setPhoneNumber(e.target.value)} 
+                  style={{...inputStyle, textAlign:'center', border: '1px solid #ddd'}} 
+                />
+                <div id="recaptcha-container"></div>
+                <button 
+                  disabled={loading}
+                  onClick={handleSendOtp} 
+                  style={{...actionBtn, background:'#1a4a8e', marginTop: '10px'}}>
+                  {loading ? "Sending..." : "Send OTP"}
+                </button>
+              </>
+            ) : (
+              <>
+                <input 
+                  type="text" 
+                  placeholder="Enter 6-digit OTP" 
+                  value={otp} 
+                  onChange={(e)=>setOtp(e.target.value)} 
+                  style={{...inputStyle, textAlign:'center', border: '1px solid #ddd'}} 
+                />
+                <button 
+                  disabled={loading}
+                  onClick={handleVerifyOtp} 
+                  style={{...actionBtn, background:'#2ecc71', marginTop: '10px'}}>
+                  {loading ? "Verifying..." : "Verify OTP"}
+                </button>
+                <button 
+                  onClick={() => setConfirmationResult(null)} 
+                  style={{ background: 'none', border: 'none', color: '#1a4a8e', width: '100%', marginTop: '10px', fontSize: '12px', cursor: 'pointer' }}>
+                  Change Number
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      <p style={{ marginTop: '20px', fontSize: '12px', opacity: 0.8 }}>Ali Campus Management System v2.0</p>
     </div>
   );
 
@@ -618,7 +770,7 @@ function App() {
             setDirSearch('');
             setView('teacher_directory'); 
           }} style={getNavStyle('teacher_directory')}>📇 Directory</button>}
-          <button onClick={() => { setIsLoggedIn(false); setNotifications([]); }} style={getNavStyle('logout')}>🚪 Out</button>
+          <button onClick={() => { setIsLoggedIn(false); setNotifications([]); setConfirmationResult(null); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
 
