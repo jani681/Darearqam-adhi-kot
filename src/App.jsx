@@ -614,11 +614,12 @@ function App() {
       <h3>Ali Campus Login</h3>
       <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', textAlign:'center'}} />
       <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold'}}>LOGIN</button>
+      <div style={{ fontSize: "12px", color: "#888", textAlign: "center", marginTop: "10px" }}>Developed by : Touqeer Iqbal Baghoor<br/>Contact: 923015800630</div>
     </div>
   );
 
   return (
-    <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
+    <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       
       {isDeleteModalOpen && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.85)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', boxSizing:'border-box' }}>
@@ -732,7 +733,7 @@ function App() {
         </div>
       </div>
 
-      <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
+      <div style={{ padding: '15px', maxWidth: '500px', margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         
         {/* SECURITY / CHANGE PASSWORD VIEW */}
         {view === 'security' && (
@@ -1268,6 +1269,9 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Footer Credit */}
+      <footer style={{ fontSize: "12px", color: "#666", textAlign: "center", padding: "8px 0" }}>Developed by : Touqeer Iqbal Baghoor<br/>Contact: 923015800630</footer>
     </div>
   );
 }
