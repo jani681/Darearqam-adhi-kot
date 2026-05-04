@@ -9,7 +9,7 @@ const SECTIONS = ["A", "B", "C"];
 const ADMIN_PASSWORD = "ali786"; 
 const SCHOOL_COORDS = { lat: 32.1072678, lng: 71.8037100 }; 
 
-// Logo Configuration
+// Logo Configuration - Fixed Variable
 const schoolLogo = "https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png";
 
 const MOTIVATIONS = [
@@ -594,9 +594,23 @@ function App() {
     );
   };
 
+  // FIX: Applied Logo Binding and Fallback for Login Screen
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
-      <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', background:'white', padding:'5px' }} />
+      <img 
+        src={schoolLogo} 
+        alt="School Logo" 
+        onError={(e) => { e.target.src = "https://via.placeholder.com/100?text=Logo"; }}
+        style={{ 
+          height: '60px', 
+          width: 'auto',
+          borderRadius: '50%', 
+          background:'white', 
+          padding:'5px',
+          marginBottom: '10px',
+          objectFit: 'contain'
+        }} 
+      />
       <h3>Ali Campus Login</h3>
       <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', textAlign:'center'}} />
       <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold'}}>LOGIN</button>
@@ -680,16 +694,16 @@ function App() {
           {notifications.length > 0 && <span style={{ position: 'absolute', top: '0', right: '0', background: 'red', color: 'white', fontSize: '9px', borderRadius: '50%', width: '15px', height: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{notifications.length}</span>}
         </div>
         
-        {/* Updated Header with Logo */}
+        {/* FIX: Updated Header with Logo Binding, Fallback, and Specific Styling */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
           <img 
             src={schoolLogo} 
             alt="School Logo" 
+            onError={(e) => { e.target.src = "https://via.placeholder.com/100?text=Logo"; }}
             style={{ 
               height: '40px', 
               width: 'auto', 
-              objectFit: 'contain',
-              maxHeight: 'min(40px, 8vw)' 
+              objectFit: 'contain'
             }} 
           />
           <h3 style={{margin:0}}>DAR-E-ARQAM (ALI CAMPUS)</h3>
