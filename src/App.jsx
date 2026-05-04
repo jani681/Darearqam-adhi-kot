@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 const CLASSES = ["Playgroup", "Nursery", "KG", "1st Class", "2nd Class", "3rd Class", "4th Class", "5th Class", "6th Class", "7th Class", "8th Class", "9th Class", "10th Class"];
-const SECTIONS = ["A", "B", "C"]; // SECTION FEATURE ADDED
+const SECTIONS = ["A", "B", "C"]; 
 const ADMIN_PASSWORD = "ali786"; 
 const SCHOOL_COORDS = { lat: 32.1072678, lng: 71.8037100 }; 
 
@@ -20,7 +20,7 @@ function App() {
   const [attendance, setAttendance] = useState({}); 
   const [history, setHistory] = useState([]);
   const [filterClass, setFilterClass] = useState(CLASSES[0]);
-  const [filterSection, setFilterSection] = useState('All'); // SECTION FEATURE ADDED
+  const [filterSection, setFilterSection] = useState('All'); 
   const [status, setStatus] = useState('Online');
   const [classStats, setClassStats] = useState({});
   
@@ -30,7 +30,7 @@ function App() {
   const [baseFee, setBaseFee] = useState('');
   const [arrears, setArrears] = useState('');
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
-  const [selectedSection, setSelectedSection] = useState(''); // SECTION FEATURE ADDED
+  const [selectedSection, setSelectedSection] = useState(''); 
   const [editingStudent, setEditingStudent] = useState(null);
 
   const [staffRecords, setStaffRecords] = useState([]);
@@ -58,23 +58,25 @@ function App() {
   const [allLeaves, setAllLeaves] = useState([]);
   const [myLeaveRecords, setMyLeaveRecords] = useState([]);
 
-  // PREVIEW STATES
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState([]);
   const [previewHeaders, setPreviewHeaders] = useState([]);
   const [previewFileName, setPreviewFileName] = useState('');
 
-  // FILTER STATES
   const [searchQuery, setSearchQuery] = useState('');
   const [classFilter, setClassFilter] = useState('All');
 
-  // NOTIFICATION STATES
   const [notifications, setNotifications] = useState([]);
   const [showNotifPanel, setShowNotifPanel] = useState(false);
 
-  // TEACHER DIRECTORY STATES
   const [teacherDirectory, setTeacherDirectory] = useState([]);
   const [dirSearch, setDirSearch] = useState('');
+
+  // DELETE SYSTEM STATES
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [adminAnalytics, setAdminAnalytics] = useState({
     totalStudents: 0,
@@ -87,7 +89,6 @@ function App() {
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
-  // ===== NOTIFICATION HELPER =====
   const addNotification = (msg, type = 'success') => {
     const newNotif = {
       id: Date.now(),
@@ -98,7 +99,6 @@ function App() {
     setNotifications(prev => [newNotif, ...prev].slice(0, 20));
   };
 
-  // ===== BACKUP & RESTORE LOGIC =====
   const handleDownloadBackup = async () => {
     try {
       addNotification("Preparing backup...", "info");
@@ -173,7 +173,6 @@ function App() {
     e.target.value = null; 
   };
 
-  // ===== SMART FILTERING LOGIC =====
   const getFilteredRecords = () => {
     return records.filter(r => {
       const matchesSearch = 
@@ -181,15 +180,12 @@ function App() {
         r.roll_number.toString().includes(searchQuery);
       
       const matchesClass = classFilter === 'All' || r.class === classFilter;
-      
-      // SECTION FEATURE ADDED
       const matchesSection = filterSection === 'All' || (r.section || 'General') === filterSection;
       
       return matchesSearch && matchesClass && matchesSection;
     });
   };
 
-  // ===== CSV EXPORT LOGIC =====
   const downloadCSV = (data, headers, fileName) => {
     const csvRows = [];
     csvRows.push(headers.join(','));
@@ -221,7 +217,7 @@ function App() {
         student_name: d.data().student_name,
         roll_number: d.data().roll_number,
         class: d.data().class,
-        section: d.data().section || 'General', // SECTION FEATURE ADDED
+        section: d.data().section || 'General',
         base_fee: d.data().base_fee,
         arrears: d.data().arrears
       }));
@@ -313,7 +309,6 @@ function App() {
     
     try {
       setStatus('Checking records...');
-      // Validation: Check if already marked today
       const qCheck = query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today));
       const checkSnap = await getDocs(qCheck);
       
@@ -407,7 +402,7 @@ function App() {
   useEffect(() => { if (isLoggedIn) fetchStats(); }, [isLoggedIn, view]);
 
   const clearInputs = () => {
-    setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears(''); setSelectedSection(''); setEditingStudent(null); // SECTION FEATURE UPDATED
+    setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears(''); setSelectedSection(''); setEditingStudent(null); 
   };
 
   const getNavStyle = (t) => ({
@@ -415,14 +410,9 @@ function App() {
     backgroundColor: view === t ? '#f39c12' : '#ffffff', color: '#1a4a8e', boxShadow: '0 4px 0 #bdc3c7', cursor:'pointer'
   });
 
-  // --- AUTO ABSENT LOGIC (READ ONLY) ---
   const getUnifiedTeacherAttendanceList = () => {
     const selectedDate = tAttSearchDate || today;
-    
-    // 1. Get filtered present list for selected date
     const presentList = teacherAttendanceList.filter(t => t.date === selectedDate);
-    
-    // 2. Identify absentees from staffRecords
     const presentNames = new Set(presentList.map(p => p.name));
     const absentList = staffRecords
       .filter(staff => !presentNames.has(staff.name))
@@ -430,12 +420,39 @@ function App() {
         id: `absent-${staff.name}`,
         name: staff.name,
         date: selectedDate,
-        time: null, // Indicates absence
+        time: null, 
         distance: "N/A",
         status: "Absent (Auto Detected)"
       }));
     
     return [...presentList, ...absentList];
+  };
+
+  // --- ADMIN DELETE LOGIC ---
+  const requestDelete = (record) => {
+    if(userRole !== 'admin') return alert("Access Denied: Admin Only");
+    setRecordToDelete(record);
+    setDeleteConfirmText('');
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmFinalDelete = async () => {
+    if (userRole !== 'admin') return;
+    if (deleteConfirmText !== "DELETE") return alert("Please type DELETE to confirm.");
+    
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, "daily_attendance", recordToDelete.id));
+      setHistory(prev => prev.filter(h => h.id !== recordToDelete.id));
+      addNotification(`Record for ${recordToDelete.class} (${recordToDelete.date}) deleted permanently.`, "warning");
+      alert("Record deleted successfully.");
+      setIsDeleteModalOpen(false);
+      setRecordToDelete(null);
+    } catch (e) {
+      alert("Error deleting record: " + e.message);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (!isLoggedIn) return (
@@ -450,7 +467,46 @@ function App() {
   return (
     <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f7f9', minHeight: '100vh' }}>
       
-      {/* CSV PREVIEW MODAL LAYER */}
+      {/* ADMIN DELETE CONFIRMATION MODAL */}
+      {isDeleteModalOpen && (
+        <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.85)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', boxSizing:'border-box' }}>
+            <div style={{ background:'white', width:'100%', maxWidth:'400px', borderRadius:'15px', padding:'20px', textAlign:'center' }}>
+                <h3 style={{color:'#e74c3c', marginTop:0}}>⚠️ Critical Warning</h3>
+                <p style={{fontSize:'14px', color:'#444', lineHeight:'1.5'}}>Are you sure you want to delete this record? This action cannot be undone.</p>
+                
+                <div style={{background:'#f8f9fa', padding:'10px', borderRadius:'8px', margin:'15px 0', fontSize:'13px', border:'1px solid #eee'}}>
+                    <b>Class:</b> {recordToDelete?.class}<br/>
+                    <b>Date:</b> {recordToDelete?.date}
+                </div>
+
+                <p style={{fontSize:'12px', color:'#666', marginBottom:'10px'}}>Type <b>DELETE</b> to confirm:</p>
+                <input 
+                    type="text" 
+                    value={deleteConfirmText} 
+                    onChange={(e) => setDeleteConfirmText(e.target.value)} 
+                    placeholder="DELETE"
+                    style={{...inputStyle, textAlign:'center', borderColor:'#e74c3c', color:'#e74c3c', fontWeight:'bold'}}
+                />
+
+                <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
+                    <button 
+                        disabled={deleteConfirmText !== "DELETE" || isDeleting}
+                        onClick={confirmFinalDelete}
+                        style={{...actionBtn, background: deleteConfirmText === "DELETE" ? '#e74c3c' : '#ccc', flex:1, fontSize:'14px'}}
+                    >
+                        {isDeleting ? "Deleting..." : "Confirm Permanent Delete"}
+                    </button>
+                    <button 
+                        onClick={() => setIsDeleteModalOpen(false)}
+                        style={{...actionBtn, background:'#7f8c8d', flex:1, fontSize:'14px'}}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {showPreview && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.7)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', boxSizing:'border-box' }}>
           <div style={{ background:'white', width:'100%', maxWidth:'600px', borderRadius:'15px', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
@@ -485,7 +541,6 @@ function App() {
         </div>
       )}
 
-      {/* NOTIFICATION PANEL OVERLAY */}
       {showNotifPanel && (
         <div style={{ position: 'fixed', top: '70px', right: '15px', width: '280px', maxHeight: '400px', backgroundColor: 'white', borderRadius: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 1001, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '12px', background: '#1a4a8e', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -617,7 +672,6 @@ function App() {
           </>
         )}
 
-        {/* TEACHER DIRECTORY VIEW */}
         {view === 'teacher_directory' && (
           <div>
             <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
@@ -827,7 +881,6 @@ function App() {
             <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            {/* SECTION FEATURE ADDED */}
             <select value={selectedSection} onChange={(e)=>setSelectedSection(e.target.value)} style={inputStyle}>
               <option value="">No Section (General)</option>
               {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
@@ -839,7 +892,7 @@ function App() {
                 roll_number:rollNo, 
                 parent_whatsapp:whatsapp, 
                 class:selectedClass, 
-                section:selectedSection, // SECTION FEATURE ADDED
+                section:selectedSection, 
                 base_fee:Number(baseFee), 
                 arrears:Number(arrears) 
               };
@@ -869,7 +922,6 @@ function App() {
                         <option value="All">All Classes</option>
                         {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    {/* SECTION FEATURE ADDED */}
                     <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'100px'}}>
                         <option value="All">All Sections</option>
                         <option value="General">General</option>
@@ -887,7 +939,6 @@ function App() {
                     <span style={{fontSize:'16px'}}>🟢</span> WhatsApp
                   </a>
                 </div>
-                {/* SECTION FEATURE UPDATED DISPLAY */}
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
                    {r.class} {r.section ? `- Section ${r.section}` : ''} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}
                 </div>
@@ -904,7 +955,6 @@ function App() {
           <div>
             <h3 style={{textAlign:'center', margin:'0 0 5px 0'}}>{filterClass} - {today}</h3>
             
-            {/* SECTION FEATURE ADDED FILTER */}
             <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e', padding:'10px', marginBottom:'15px'}}>
                <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0}}>
                   <option value="All">All Students ({filterClass})</option>
@@ -970,8 +1020,18 @@ function App() {
               <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
             </div>
             {history.map(h => (
-              <div key={h.id} style={cardStyle}>
-                <b>{h.date}</b> - {h.class} {h.section_filter && h.section_filter !== 'All' ? `(${h.section_filter})` : ''}
+              <div key={h.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div>
+                    <b>{h.date}</b> - {h.class} {h.section_filter && h.section_filter !== 'All' ? `(${h.section_filter})` : ''}
+                </div>
+                {userRole === 'admin' && (
+                    <button 
+                        onClick={() => requestDelete(h)}
+                        style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold', cursor:'pointer'}}
+                    >
+                        Delete
+                    </button>
+                )}
               </div>
             ))}
           </div>
@@ -993,7 +1053,6 @@ function App() {
             </div>
             <input type="date" value={tAttSearchDate} onChange={(e)=>setTAttSearchDate(e.target.value)} style={inputStyle} placeholder="Filter by Date" />
             
-            {/* Unified Display List: Present + Auto-Absent */}
             {getUnifiedTeacherAttendanceList().map(t => (
               <div key={t.id} style={{...cardStyle, borderLeft: t.time ? '6px solid #2ecc71' : '6px solid #e74c3c'}}>
                 <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}>
@@ -1089,7 +1148,7 @@ function App() {
             {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
             <button onClick={async ()=> {
               setMonthlyData([]); setRecords([]);
-              setFilterSection('All'); // SECTION FEATURE ADDED Reset
+              setFilterSection('All'); 
               const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
               const recSnap = await getDocs(qRec);
               const studentMap = {};
@@ -1138,7 +1197,7 @@ function App() {
             </div>
             {staffRecords.map(s => (
               <div key={s.id} style={cardStyle}>
-                <div style={{display:'flex', toggleStat:'space-between', alignItems:'center'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                    <b>{s.name}</b>
                    <button onClick={async ()=>{if(window.confirm("Remove staff?")) { await deleteDoc(doc(db, "staff_records", s.id)); addNotification(`Removed: ${s.name}`, "warning"); const snap = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }}} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button>
                 </div>
