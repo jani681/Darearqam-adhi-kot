@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc, writeBatch } from "firebase/firestore"; 
+import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc, writeBatch, onSnapshot } from "firebase/firestore"; 
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -100,6 +100,10 @@ function App() {
     pendingLeaves: 0
   });
 
+  // Notice states
+  const [adminNoticeTitle, setAdminNoticeTitle] = useState('');
+  const [adminNoticeMessage, setAdminNoticeMessage] = useState('');
+
   // PASSWORD CHANGE STATES
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -108,6 +112,21 @@ function App() {
 
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
+
+  // Logic to sync System Notices from Firebase Firestore
+  useEffect(() => {
+    if (isLoggedIn) {
+      const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const noticesArr = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setSystemMessages(noticesArr);
+      });
+      return () => unsubscribe();
+    }
+  }, [isLoggedIn]);
 
   useEffect(() => {
     // Persistent Motivational Line logic - FIX: Stable date-based rotation to prevent mismatches
@@ -124,6 +143,23 @@ function App() {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setNotifications(prev => [newNotif, ...prev].slice(0, 20));
+  };
+
+  const handleCreateNotice = async () => {
+    if (!adminNoticeTitle || !adminNoticeMessage) return alert("Please enter notice title and message");
+    try {
+      await addDoc(collection(db, "notices"), {
+        title: adminNoticeTitle,
+        text: adminNoticeMessage, // mapping text for existing UI variable mapping
+        createdAt: serverTimestamp(),
+        createdBy: "admin"
+      });
+      addNotification("System notice published", "success");
+      setAdminNoticeTitle('');
+      setAdminNoticeMessage('');
+    } catch (e) {
+      alert("Failed to publish notice");
+    }
   };
 
   const handleDownloadBackup = async () => {
@@ -420,15 +456,6 @@ function App() {
         attendanceMarked: !myAtt.empty,
         pendingLeaves: myPendingLeaves.size
       });
-      
-      // FIX: Database-synced pending task reminder clearing
-      const msgs = [
-        { id: 2, text: "Admin: Monthly staff meeting scheduled for Saturday.", type: 'admin' }
-      ];
-      if (todayClasses === 0) {
-        msgs.unshift({ id: 1, text: "Reminder: Please complete student attendance by 9:00 AM.", type: 'notice' });
-      }
-      setSystemMessages(msgs);
     }
   };
 
@@ -759,11 +786,11 @@ function App() {
             <div style={{ ...cardStyle, borderLeft: '6px solid #3498db' }}>
               <h4 style={{ marginTop: 0, fontSize: '14px' }}>📢 System Notices</h4>
               {systemMessages.length === 0 ? (
-                <div style={{ fontSize: '11px', color: '#666' }}>All caught up! No active notices.</div>
+                <div style={{ fontSize: '11px', color: '#666' }}>No notices available</div>
               ) : (
                 systemMessages.map(m => (
                   <div key={m.id} style={{ fontSize: '11px', background: '#f8f9fa', padding: '6px', borderRadius: '6px', marginBottom: '4px', borderLeft: '3px solid #3498db' }}>
-                    {m.text}
+                    <strong>{m.title}</strong>: {m.text}
                   </div>
                 ))
               )}
@@ -808,6 +835,14 @@ function App() {
                 </div>
               </div>
             </div>
+
+            <div style={cardStyle}>
+              <h4 style={{marginTop:0}}>📢 Broadcast Notice</h4>
+              <input placeholder="Notice Title" value={adminNoticeTitle} onChange={(e)=>setAdminNoticeTitle(e.target.value)} style={inputStyle} />
+              <textarea placeholder="Message for all teachers..." value={adminNoticeMessage} onChange={(e)=>setAdminNoticeMessage(e.target.value)} style={{...inputStyle, height: '60px'}} />
+              <button onClick={handleCreateNotice} style={{...actionBtn, padding:'10px', fontSize:'12px'}}>Publish Notice</button>
+            </div>
+
             <div style={{...cardStyle, borderLeft: '6px solid #9b59b6'}}>
               <h4 style={{marginTop:0}}>🛡️ Data Protection</h4>
               <button onClick={handleDownloadBackup} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#9b59b6'}}>Download Full Backup (JSON)</button>
