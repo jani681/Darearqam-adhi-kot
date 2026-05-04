@@ -103,18 +103,11 @@ function App() {
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
-  // FIX: Daily motivational line rotation logic
   useEffect(() => {
-    const savedQuote = localStorage.getItem('daily_quote_text');
-    const savedDate = localStorage.getItem('daily_quote_date');
-    if (savedDate === today && savedQuote) {
-      setDailyQuote(savedQuote);
-    } else {
-      const randomQuote = MOTIVATIONS[Math.floor(Math.random() * MOTIVATIONS.length)];
-      localStorage.setItem('daily_quote_text', randomQuote);
-      localStorage.setItem('daily_quote_date', today);
-      setDailyQuote(randomQuote);
-    }
+    // Persistent Motivational Line logic - FIX: Stable date-based rotation to prevent mismatches
+    const dayOfMonth = new Date().getDate();
+    const quoteIndex = dayOfMonth % MOTIVATIONS.length;
+    setDailyQuote(MOTIVATIONS[quoteIndex]);
   }, [today]);
 
   const addNotification = (msg, type = 'success') => {
@@ -332,7 +325,6 @@ function App() {
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, SCHOOL_COORDS.lat, SCHOOL_COORDS.lng);
         if (dist <= 500) {
-          // FIX: Prevent stale state by confirming write before update
           await addDoc(collection(db, "teacher_attendance"), { 
             name: staffName, 
             date: today, 
@@ -342,7 +334,8 @@ function App() {
           });
           alert("Attendance Marked!"); 
           setStatus('Done');
-          setTeacherSummary(prev => ({ ...prev, attendanceMarked: true }));
+          // FIX: Call fetchStats to sync DB states and clear reminders globally
+          fetchStats();
           addNotification("Attendance marked successfully", "success");
         } else { 
           alert(`Too far! ${Math.round(dist)}m.`); 
@@ -406,18 +399,30 @@ function App() {
     }
 
     if (userRole === 'staff') {
-      const todayClasses = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
+      // FIX: Dynamically fetch data and update notifications safely
+      const studentAttSnap = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
+      const todayClasses = studentAttSnap.size;
       const myAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today)));
       const myPendingLeaves = await getDocs(query(collection(db, "teacher_leaves"), where("name", "==", staffName), where("status", "==", "pending")));
+      
+      // Load events data for mini-calendar fix
+      const allMyAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName)));
+      setMyAttendanceRecords(allMyAtt.docs.map(d => d.data()));
+
       setTeacherSummary({
-        todayClasses: todayClasses.size,
+        todayClasses: todayClasses,
         attendanceMarked: !myAtt.empty,
         pendingLeaves: myPendingLeaves.size
       });
-      setSystemMessages([
-        { id: 1, text: "Reminder: Please complete student attendance by 9:00 AM.", type: 'notice' },
+      
+      // FIX: Database-synced pending task reminder clearing
+      const msgs = [
         { id: 2, text: "Admin: Monthly staff meeting scheduled for Saturday.", type: 'admin' }
-      ]);
+      ];
+      if (todayClasses === 0) {
+        msgs.unshift({ id: 1, text: "Reminder: Please complete student attendance by 9:00 AM.", type: 'notice' });
+      }
+      setSystemMessages(msgs);
     }
   };
 
@@ -474,25 +479,36 @@ function App() {
     }
   };
 
-  const MiniCalendar = () => {
+  // FIX: Populate empty calendar using dynamic attendance database events
+  const MiniCalendar = ({ events = [] }) => {
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const currentDay = now.getDate();
+    const currentMonthStr = now.toISOString().slice(0, 7);
+    
+    const attendedDays = events
+      .filter(r => r.date && r.date.startsWith(currentMonthStr))
+      .map(r => parseInt(r.date.split('-')[2], 10));
+
     return (
       <div style={{ background: '#fff', borderRadius: '15px', padding: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
         <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#1a4a8e', textAlign: 'center' }}>
           {now.toLocaleString('default', { month: 'long' })} {now.getFullYear()}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
-          {[...Array(daysInMonth)].map((_, i) => (
+          {[...Array(daysInMonth)].map((_, i) => {
+            const day = i + 1;
+            const isToday = day === currentDay;
+            const isAttended = attendedDays.includes(day);
+            return (
             <div key={i} style={{ 
               fontSize: '10px', padding: '4px', textAlign: 'center', borderRadius: '4px',
-              backgroundColor: (i + 1) === currentDay ? '#f39c12' : '#f0f2f5',
-              color: (i + 1) === currentDay ? '#fff' : '#333'
+              backgroundColor: isToday ? '#f39c12' : (isAttended ? '#2ecc71' : '#f0f2f5'),
+              color: isToday || isAttended ? '#fff' : '#333'
             }}>
-              {i + 1}
+              {day}
             </div>
-          ))}
+          )})}
         </div>
       </div>
     );
@@ -614,6 +630,7 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
         
+        {/* TEACHER DASHBOARD EXTENSIONS */}
         {userRole === 'staff' && view === 'dashboard' && (
           <div>
             <div style={{ ...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12' }}>
@@ -646,15 +663,19 @@ function App() {
 
             <div style={{ ...cardStyle, borderLeft: '6px solid #3498db' }}>
               <h4 style={{ marginTop: 0, fontSize: '14px' }}>📢 System Notices</h4>
-              {systemMessages.map(m => (
-                <div key={m.id} style={{ fontSize: '11px', background: '#f8f9fa', padding: '6px', borderRadius: '6px', marginBottom: '4px', borderLeft: '3px solid #3498db' }}>
-                  {m.text}
-                </div>
-              ))}
+              {systemMessages.length === 0 ? (
+                <div style={{ fontSize: '11px', color: '#666' }}>All caught up! No active notices.</div>
+              ) : (
+                systemMessages.map(m => (
+                  <div key={m.id} style={{ fontSize: '11px', background: '#f8f9fa', padding: '6px', borderRadius: '6px', marginBottom: '4px', borderLeft: '3px solid #3498db' }}>
+                    {m.text}
+                  </div>
+                ))
+              )}
             </div>
 
             <div style={{ marginBottom: '15px' }}>
-              <MiniCalendar />
+              <MiniCalendar events={myAttendanceRecords} />
             </div>
 
             <div style={{ ...cardStyle, borderLeft: '6px solid #1a4a8e' }}>
@@ -905,4 +926,192 @@ function App() {
             {getFilteredRecords().map(r => (
               <div key={r.id} style={cardStyle}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><span><b>{r.student_name}</b> ({r.roll_number})</span><a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{textDecoration:'none', color:'#25D366', fontWeight:'bold'}}><span style={{fontSize:'16px'}}>🟢</span> WhatsApp</a></div>
-                <div style={{fontSize:'12px', color:'#666',
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>{r.class} {r.section ? `- Section ${r.section}` : ''} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}</div>
+                <div style={{marginTop:'10px'}}>
+                  <button onClick={()=>{setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp); setBaseFee(r.base_fee); setArrears(r.arrears); setSelectedSection(r.section || ''); setView('add');}} style={{background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', marginRight:'10px'}}>Edit</button>
+                  <button onClick={async ()=>{if(window.confirm("Delete?")){await deleteDoc(doc(db,"ali_campus_records",r.id)); addNotification(`Deleted student: ${r.student_name}`, "warning"); setView('dashboard');}}} style={{background:'#e74c3c', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px'}}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {view === 'attendance' && (
+          <div>
+            <h3 style={{textAlign:'center', margin:'0 0 5px 0'}}>{filterClass} - {today}</h3>
+            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e', padding:'10px', marginBottom:'15px'}}>
+               <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0}}><option value="All">All Students ({filterClass})</option><option value="General">General (No Section)</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}</select>
+               <input placeholder="Find Student in List..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, marginTop:'10px', marginBottom:0}}/>
+            </div>
+            {getFilteredRecords().map(r => (
+              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div><div style={{fontWeight:'bold'}}>{r.student_name} {r.section ? <small style={{color:'#1a4a8e', background:'#e8f0fe', padding:'2px 5px', borderRadius:'4px'}}>Sec {r.section}</small> : ''}</div><div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div></div>
+                <div>
+                  <button onClick={()=>setAttendance({...attendance, [r.id]:'P'})} style={{background:attendance[r.id]==='P'?'#2ecc71':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', marginRight:'5px'}}>P</button>
+                  <button onClick={()=>setAttendance({...attendance, [r.id]:'A'})} style={{background:attendance[r.id]==='A'?'#e74c3c':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px'}}>A</button>
+                </div>
+              </div>
+            ))}
+            <button onClick={async ()=>{
+              try {
+                // FIX: Query strictly by Class and Date to guarantee 1 doc per class/day (prevent section-level duplicates)
+                const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("date", "==", today));
+                const checkSnap = await getDocs(qCheck);
+                
+                if (!checkSnap.empty) {
+                  const existingDoc = checkSnap.docs[0];
+                  const existingData = existingDoc.data().attendance_data || {};
+                  // Merge so we don't overwrite previous sections' data
+                  const mergedAttendance = { ...existingData, ...attendance };
+                  const attendancePayload = { class: filterClass, date: today, attendance_data: mergedAttendance, timestamp: serverTimestamp() };
+                  
+                  await updateDoc(doc(db, "daily_attendance", existingDoc.id), attendancePayload);
+                  addNotification(`Attendance updated for ${filterClass}`, "success");
+                } else {
+                  const attendancePayload = { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() };
+                  await addDoc(collection(db, "daily_attendance"), attendancePayload);
+                  addNotification(`Attendance submitted for ${filterClass}`, "success");
+                }
+                
+                alert("Attendance Saved!"); 
+                setView('dashboard'); 
+                setAttendance({}); 
+                setSearchQuery(''); 
+                setFilterSection('All');
+                
+                // FIX: Immediately fetch stats to clear pending task reminders in dashboard
+                fetchStats();
+              } catch (e) { alert("Error saving attendance"); }
+            }} style={actionBtn}>Submit Attendance</button>
+          </div>
+        )}
+
+        {view === 'history' && (
+          <div>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
+              <h3 style={{margin:0}}>Attendance History</h3>
+              <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+            </div>
+            {history.map(h => (
+              <div key={h.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div><b>{h.date}</b> - {h.class} {h.section_filter && h.section_filter !== 'All' ? `(${h.section_filter})` : ''}</div>
+                {userRole === 'admin' && <button onClick={() => requestDelete(h)} style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold', cursor:'pointer'}}>Delete</button>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {view === 'teacher_attendance_view' && (
+          <div>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
+              <h3 style={{margin:0}}>Teacher Attendance</h3>
+              <button onClick={() => {
+                const list = getUnifiedTeacherAttendanceList();
+                downloadPDF("Teacher Attendance & Absence Report", ["Teacher Name", "Date", "Status/Time", "Distance"], list.map(t => [t.name, t.date, t.time || "❌ Absent (Auto)", t.distance]), "Teacher_Attendance_Report");
+              }} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+            </div>
+            <input type="date" value={tAttSearchDate} onChange={(e)=>setTAttSearchDate(e.target.value)} style={inputStyle} placeholder="Filter by Date" />
+            {getUnifiedTeacherAttendanceList().map(t => (
+              <div key={t.id} style={{...cardStyle, borderLeft: t.time ? '6px solid #2ecc71' : '6px solid #e74c3c'}}>
+                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}><span>{t.name}</span><span style={{color: t.time ? '#1a4a8e' : '#e74c3c'}}>{t.time ? t.time : "❌ Absent (Auto Detected)"}</span></div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📅 {t.date} | 📍 Dist: {t.distance}</div>
+                {t.time && <button onClick={async () => {
+                      try {
+                        const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
+                        const staffSnap = await getDocs(qStaff);
+                        const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
+                        const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name));
+                        const attSnap = await getDocs(qAtt);
+                        const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                        setSelectedTeacherProfile(staffData);
+                        setTeacherProfileRecords(sortedAtt);
+                        setMyProfileData(null); setView('teacher_profile_view');
+                      } catch (err) { alert("Error loading profile."); }
+                    }} style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}>View Profile</button>}
+              </div>
+            ))}
+            <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/><h3 style={{color:'#1a4a8e'}}>Teacher Leave Applications</h3>
+            {allLeaves.map(l => (
+              <div key={l.id} style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
+                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}><div><b>{l.name}</b><div style={{fontSize:'12px', color:'#666'}}>{l.fromDate} → {l.toDate}</div></div><span style={{padding:'4px 8px', borderRadius:'5px', fontSize:'10px', fontWeight:'bold', background: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12', color:'white'}}>{l.status.toUpperCase()}</span></div>
+                 <p style={{fontSize:'13px', color:'#333', background:'#f9f9f9', padding:'8px', borderRadius:'5px', margin:'10px 0'}}>{l.reason}</p>
+                 {l.status === 'pending' && <div style={{display:'flex', gap:'10px'}}><button onClick={async () => { await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'approved' }); addNotification(`Approved leave for ${l.name}`, "success"); setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'approved'} : item)); fetchStats(); }} style={{flex:1, background:'#2ecc71', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>✅ Approve</button><button onClick={async () => { await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'rejected' }); addNotification(`Rejected leave for ${l.name}`, "warning"); setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'rejected'} : item)); fetchStats(); }} style={{flex:1, background:'#e74c3c', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>❌ Reject</button></div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {view === 'monthly_report' && (
+          <div style={cardStyle}>
+             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}><h4 style={{margin:0}}>{filterClass} Report</h4><button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button></div>
+             <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}><thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead><tbody>{monthlyData.map(([info, s])=>(<tr key={info.name} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'8px'}}>{info.roll} - {info.name}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody></table>
+             <button onClick={()=>setView('dashboard')} style={{...actionBtn, marginTop:'15px'}}>Back Home</button>
+          </div>
+        )}
+
+        {(view==='sel_view'||view==='sel_att'||view==='sel_report') && (
+          <div style={cardStyle}>
+            <h3>Select Class</h3>
+            <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+            {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
+            <button onClick={async ()=> {
+              setMonthlyData([]); setRecords([]); setFilterSection('All'); 
+              const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
+              const recSnap = await getDocs(qRec);
+              const studentMap = {};
+              recSnap.docs.forEach(d => { studentMap[d.id] = { name: d.data().student_name, roll: d.data().roll_number }; });
+              if(view==='sel_report') {
+                const q = query(collection(db, "daily_attendance"), where("class", "==", filterClass));
+                const snap = await getDocs(q);
+                const summary = {};
+                snap.docs.forEach(d => {
+                  const data = d.data();
+                  if (data.date?.startsWith(selectedMonth)) {
+                    Object.entries(data.attendance_data).forEach(([id, stat]) => {
+                      const stdInfo = studentMap[id] || { name: id, roll: 'N/A' };
+                      const key = JSON.stringify(stdInfo); 
+                      if (!summary[key]) summary[key] = { p: 0, a: 0 };
+                      stat === 'P' ? summary[key].p++ : summary[key].a++;
+                    });
+                  }
+                });
+                setMonthlyData(Object.entries(summary).map(([k, v]) => [JSON.parse(k), v]));
+                setView('monthly_report');
+              } else {
+                setRecords(recSnap.docs.map(d => ({ id: d.id, ...d.data(), class: filterClass })));
+                setView(view==='sel_view'?'view':'attendance');
+              }
+            }} style={actionBtn}>Proceed</button>
+          </div>
+        )}
+
+        {view === 'staff_list' && (
+          <div>
+            <div style={cardStyle}>
+              <h3>Add New Staff</h3>
+              <input placeholder="Name" value={sName} onChange={(e)=>setSName(e.target.value)} style={inputStyle}/><input placeholder="Role" value={sRole} onChange={(e)=>setSRole(e.target.value)} style={inputStyle}/><input placeholder="Salary" value={sSalary} onChange={(e)=>setSSalary(e.target.value)} style={inputStyle}/><input placeholder="Password" value={sPass} onChange={(e)=>setSPass(e.target.value)} style={inputStyle}/>
+              <button onClick={async ()=>{
+                await addDoc(collection(db, "staff_records"), {name:sName, role:sRole, salary:sSalary, password:sPass});
+                addNotification(`Staff added: ${sName}`, "success");
+                const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d => ({ id: d.id, ...d.data() })));
+                setSName(''); setSRole(''); setSSalary(''); setSPass('');
+              }} style={actionBtn}>Add Staff</button>
+            </div>
+            {staffRecords.map(s => (
+              <div key={s.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><b>{s.name}</b><button onClick={async ()=>{if(window.confirm("Remove staff?")) { await deleteDoc(doc(db, "staff_records", s.id)); addNotification(`Removed: ${s.name}`, "warning"); const snap = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }}} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button></div>
+                <div style={{fontSize:'12px', color:'#666'}}>Role: {s.role} | PWD: {s.password}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const cardStyle = { background:'white', padding:'15px', borderRadius:'15px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)', marginBottom:'12px', borderLeft:'6px solid #f39c12' };
+const inputStyle = { width:'100%', padding:'12px', margin:'8px 0', borderRadius:'10px', border:'1px solid #ddd', boxSizing:'border-box', fontSize:'14px' };
+const actionBtn = { width:'100%', padding:'15px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', fontSize:'16px' };
+
+export default App;
