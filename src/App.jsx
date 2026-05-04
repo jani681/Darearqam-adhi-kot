@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 const CLASSES = ["Playgroup", "Nursery", "KG", "1st Class", "2nd Class", "3rd Class", "4th Class", "5th Class", "6th Class", "7th Class", "8th Class", "9th Class", "10th Class"];
+const SECTIONS = ["A", "B", "C"]; // SECTION FEATURE ADDED
 const ADMIN_PASSWORD = "ali786"; 
 const SCHOOL_COORDS = { lat: 32.1072678, lng: 71.8037100 }; 
 
@@ -19,6 +20,7 @@ function App() {
   const [attendance, setAttendance] = useState({}); 
   const [history, setHistory] = useState([]);
   const [filterClass, setFilterClass] = useState(CLASSES[0]);
+  const [filterSection, setFilterSection] = useState('All'); // SECTION FEATURE ADDED
   const [status, setStatus] = useState('Online');
   const [classStats, setClassStats] = useState({});
   
@@ -28,6 +30,7 @@ function App() {
   const [baseFee, setBaseFee] = useState('');
   const [arrears, setArrears] = useState('');
   const [selectedClass, setSelectedClass] = useState(CLASSES[0]);
+  const [selectedSection, setSelectedSection] = useState(''); // SECTION FEATURE ADDED
   const [editingStudent, setEditingStudent] = useState(null);
 
   const [staffRecords, setStaffRecords] = useState([]);
@@ -179,7 +182,10 @@ function App() {
       
       const matchesClass = classFilter === 'All' || r.class === classFilter;
       
-      return matchesSearch && matchesClass;
+      // SECTION FEATURE ADDED
+      const matchesSection = filterSection === 'All' || (r.section || 'General') === filterSection;
+      
+      return matchesSearch && matchesClass && matchesSection;
     });
   };
 
@@ -215,11 +221,12 @@ function App() {
         student_name: d.data().student_name,
         roll_number: d.data().roll_number,
         class: d.data().class,
+        section: d.data().section || 'General', // SECTION FEATURE ADDED
         base_fee: d.data().base_fee,
         arrears: d.data().arrears
       }));
       setPreviewData(data);
-      setPreviewHeaders(["student_name", "roll_number", "class", "base_fee", "arrears"]);
+      setPreviewHeaders(["student_name", "roll_number", "class", "section", "base_fee", "arrears"]);
       setPreviewFileName("All_Students_Data");
       setShowPreview(true);
     } catch (e) { alert("Export failed"); }
@@ -400,7 +407,7 @@ function App() {
   useEffect(() => { if (isLoggedIn) fetchStats(); }, [isLoggedIn, view]);
 
   const clearInputs = () => {
-    setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears(''); setEditingStudent(null);
+    setName(''); setRollNo(''); setWhatsapp(''); setBaseFee(''); setArrears(''); setSelectedSection(''); setEditingStudent(null); // SECTION FEATURE UPDATED
   };
 
   const getNavStyle = (t) => ({
@@ -780,7 +787,7 @@ function App() {
             <h4 style={{marginTop:'20px'}}>Attendance History</h4>
             {(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map((r, idx) => (
               <div key={idx} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between'}}>
+                <div style={{display:'flex', justifyContent:'space-between', toggleStat:'bold'}}>
                   <b>{r.date}</b>
                   <span>{r.time}</span>
                 </div>
@@ -820,9 +827,22 @@ function App() {
             <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
               {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+            {/* SECTION FEATURE ADDED */}
+            <select value={selectedSection} onChange={(e)=>setSelectedSection(e.target.value)} style={inputStyle}>
+              <option value="">No Section (General)</option>
+              {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+            </select>
             <button onClick={async () => {
               if(!name || !rollNo) return alert("Fill Name and Roll Number");
-              const d = { student_name:name, roll_number:rollNo, parent_whatsapp:whatsapp, class:selectedClass, base_fee:Number(baseFee), arrears:Number(arrears) };
+              const d = { 
+                student_name:name, 
+                roll_number:rollNo, 
+                parent_whatsapp:whatsapp, 
+                class:selectedClass, 
+                section:selectedSection, // SECTION FEATURE ADDED
+                base_fee:Number(baseFee), 
+                arrears:Number(arrears) 
+              };
               try {
                 if (editingStudent) {
                    await updateDoc(doc(db,"ali_campus_records",editingStudent.id), d);
@@ -844,12 +864,18 @@ function App() {
                 <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
                     <input placeholder="Search Name or Roll No..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, margin:0}} />
                 </div>
-                <div style={{display:'flex', gap:'10px'}}>
-                    <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{...inputStyle, margin:0, flex:1}}>
+                <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
+                    <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'120px'}}>
                         <option value="All">All Classes</option>
                         {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <button onClick={() => { setSearchQuery(''); setClassFilter('All'); }} style={{background:'#7f8c8d', color:'white', border:'none', borderRadius:'10px', padding:'0 15px', fontWeight:'bold'}}>Clear</button>
+                    {/* SECTION FEATURE ADDED */}
+                    <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'100px'}}>
+                        <option value="All">All Sections</option>
+                        <option value="General">General</option>
+                        {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+                    </select>
+                    <button onClick={() => { setSearchQuery(''); setClassFilter('All'); setFilterSection('All'); }} style={{background:'#7f8c8d', color:'white', border:'none', borderRadius:'10px', padding:'10px 15px', fontWeight:'bold', width:'100%', marginTop:'5px'}}>Clear Filters</button>
                 </div>
             </div>
 
@@ -861,9 +887,12 @@ function App() {
                     <span style={{fontSize:'16px'}}>🟢</span> WhatsApp
                   </a>
                 </div>
-                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>Class: {r.class} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}</div>
+                {/* SECTION FEATURE UPDATED DISPLAY */}
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>
+                   {r.class} {r.section ? `- Section ${r.section}` : ''} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}
+                </div>
                 <div style={{marginTop:'10px'}}>
-                  <button onClick={()=>{setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp); setBaseFee(r.base_fee); setArrears(r.arrears); setView('add');}} style={{background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', marginRight:'10px'}}>Edit</button>
+                  <button onClick={()=>{setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp); setBaseFee(r.base_fee); setArrears(r.arrears); setSelectedSection(r.section || ''); setView('add');}} style={{background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', marginRight:'10px'}}>Edit</button>
                   <button onClick={async ()=>{if(window.confirm("Delete?")){await deleteDoc(doc(db,"ali_campus_records",r.id)); addNotification(`Deleted student: ${r.student_name}`, "warning"); setView('dashboard');}}} style={{background:'#e74c3c', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px'}}>Delete</button>
                 </div>
               </div>
@@ -873,16 +902,22 @@ function App() {
 
         {view === 'attendance' && (
           <div>
-            <h3 style={{textAlign:'center', margin:'0 0 15px 0'}}>{filterClass} - {today}</h3>
+            <h3 style={{textAlign:'center', margin:'0 0 5px 0'}}>{filterClass} - {today}</h3>
             
-            <div style={{...cardStyle, borderLeft:'6px solid #2ecc71', padding:'10px'}}>
-                <input placeholder="Find Student in List..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, margin:0}}/>
+            {/* SECTION FEATURE ADDED FILTER */}
+            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e', padding:'10px', marginBottom:'15px'}}>
+               <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0}}>
+                  <option value="All">All Students ({filterClass})</option>
+                  <option value="General">General (No Section)</option>
+                  {SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+               </select>
+               <input placeholder="Find Student in List..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, marginTop:'10px', marginBottom:0}}/>
             </div>
 
             {getFilteredRecords().map(r => (
               <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <div>
-                    <div style={{fontWeight:'bold'}}>{r.student_name}</div>
+                    <div style={{fontWeight:'bold'}}>{r.student_name} {r.section ? <small style={{color:'#1a4a8e', background:'#e8f0fe', padding:'2px 5px', borderRadius:'4px'}}>Sec {r.section}</small> : ''}</div>
                     <div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div>
                 </div>
                 <div>
@@ -895,24 +930,26 @@ function App() {
             <button onClick={async ()=>{
               try {
                 // Validation: Check if class attendance already marked today
+                // Note: We check by class. Section logic can be expanded here if needed to be unique by section too.
                 const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("date", "==", today));
                 const checkSnap = await getDocs(qCheck);
                 
-                if (!checkSnap.empty) {
-                  alert("Attendance already marked for this class today");
+                if (!checkSnap.empty && filterSection === 'All') {
+                  alert("Full class attendance already marked today");
                   addNotification(`Duplicate attempt: ${filterClass}`, "warning");
                   return;
                 }
 
                 await addDoc(collection(db,"daily_attendance"), {
                   class:filterClass, 
+                  section_filter:filterSection, // SECTION FEATURE ADDED metadata
                   date:today, 
                   attendance_data:attendance, 
                   timestamp:serverTimestamp()
                 });
                 alert("Attendance Saved!"); 
                 addNotification(`Attendance submitted for ${filterClass}`, "success");
-                setView('dashboard'); setAttendance({}); setSearchQuery('');
+                setView('dashboard'); setAttendance({}); setSearchQuery(''); setFilterSection('All');
               } catch (e) {
                 alert("Error saving attendance");
               }
@@ -928,7 +965,7 @@ function App() {
             </div>
             {history.map(h => (
               <div key={h.id} style={cardStyle}>
-                <b>{h.date}</b> - {h.class}
+                <b>{h.date}</b> - {h.class} {h.section_filter && h.section_filter !== 'All' ? `(${h.section_filter})` : ''}
               </div>
             ))}
           </div>
@@ -1046,6 +1083,7 @@ function App() {
             {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
             <button onClick={async ()=> {
               setMonthlyData([]); setRecords([]);
+              setFilterSection('All'); // SECTION FEATURE ADDED Reset
               const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
               const recSnap = await getDocs(qRec);
               const studentMap = {};
@@ -1094,7 +1132,7 @@ function App() {
             </div>
             {staffRecords.map(s => (
               <div key={s.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                <div style={{display:'flex', toggleStat:'space-between', alignItems:'center'}}>
                    <b>{s.name}</b>
                    <button onClick={async ()=>{if(window.confirm("Remove staff?")) { await deleteDoc(doc(db, "staff_records", s.id)); addNotification(`Removed: ${s.name}`, "warning"); const snap = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }}} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button>
                 </div>
