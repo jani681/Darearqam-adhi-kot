@@ -929,26 +929,32 @@ function App() {
             
             <button onClick={async ()=>{
               try {
-                // Validation: Check if class attendance already marked today
-                // Note: We check by class. Section logic can be expanded here if needed to be unique by section too.
-                const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("date", "==", today));
+                const qCheck = query(
+                  collection(db, "daily_attendance"), 
+                  where("class", "==", filterClass), 
+                  where("section_filter", "==", filterSection), 
+                  where("date", "==", today)
+                );
                 const checkSnap = await getDocs(qCheck);
                 
-                if (!checkSnap.empty && filterSection === 'All') {
-                  alert("Full class attendance already marked today");
-                  addNotification(`Duplicate attempt: ${filterClass}`, "warning");
-                  return;
-                }
+                const attendancePayload = {
+                  class: filterClass, 
+                  section_filter: filterSection, 
+                  date: today, 
+                  attendance_data: attendance, 
+                  timestamp: serverTimestamp()
+                };
 
-                await addDoc(collection(db,"daily_attendance"), {
-                  class:filterClass, 
-                  section_filter:filterSection, // SECTION FEATURE ADDED metadata
-                  date:today, 
-                  attendance_data:attendance, 
-                  timestamp:serverTimestamp()
-                });
+                if (!checkSnap.empty) {
+                  const existingDocId = checkSnap.docs[0].id;
+                  await updateDoc(doc(db, "daily_attendance", existingDocId), attendancePayload);
+                  addNotification(`Attendance updated for ${filterClass} (${filterSection})`, "success");
+                } else {
+                  await addDoc(collection(db, "daily_attendance"), attendancePayload);
+                  addNotification(`Attendance submitted for ${filterClass} (${filterSection})`, "success");
+                }
+                
                 alert("Attendance Saved!"); 
-                addNotification(`Attendance submitted for ${filterClass}`, "success");
                 setView('dashboard'); setAttendance({}); setSearchQuery(''); setFilterSection('All');
               } catch (e) {
                 alert("Error saving attendance");
