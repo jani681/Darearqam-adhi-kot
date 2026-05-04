@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc, setDoc, onSnapshot } from "firebase/firestore"; 
+import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc, writeBatch } from "firebase/firestore"; 
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -87,11 +87,10 @@ function App() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Corrected Extension States for Sync Issues
+  // New Extension States
   const [dailyQuote, setDailyQuote] = useState('');
   const [teacherSummary, setTeacherSummary] = useState({ todayClasses: 0, attendanceMarked: false, pendingLeaves: 0 });
   const [systemMessages, setSystemMessages] = useState([]);
-  const [calendarEvents, setCalendarEvents] = useState([]); // Fix for Empty Calendar
 
   const [adminAnalytics, setAdminAnalytics] = useState({
     totalStudents: 0,
@@ -104,33 +103,19 @@ function App() {
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
-  // Fix 5: Dynamic Motivational Line (Date-based rotation)
+  // FIX: Daily motivational line rotation logic
   useEffect(() => {
-    const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
-    setDailyQuote(MOTIVATIONS[dayOfYear % MOTIVATIONS.length]);
+    const savedQuote = localStorage.getItem('daily_quote_text');
+    const savedDate = localStorage.getItem('daily_quote_date');
+    if (savedDate === today && savedQuote) {
+      setDailyQuote(savedQuote);
+    } else {
+      const randomQuote = MOTIVATIONS[Math.floor(Math.random() * MOTIVATIONS.length)];
+      localStorage.setItem('daily_quote_text', randomQuote);
+      localStorage.setItem('daily_quote_date', today);
+      setDailyQuote(randomQuote);
+    }
   }, [today]);
-
-  // Fix 2 & 3: Real-time sync for Reminders and Pending Tasks
-  useEffect(() => {
-    if (isLoggedIn && userRole === 'staff') {
-      const q = query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        setTeacherSummary(prev => ({ ...prev, attendanceMarked: !snapshot.empty }));
-      });
-      return () => unsubscribe();
-    }
-  }, [isLoggedIn, userRole, staffName, today]);
-
-  // Fix 4: Calendar Event Synchronization
-  useEffect(() => {
-    if (isLoggedIn) {
-      const q = query(collection(db, "school_events"), orderBy("date", "asc"));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        setCalendarEvents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      });
-      return () => unsubscribe();
-    }
-  }, [isLoggedIn]);
 
   const addNotification = (msg, type = 'success') => {
     const newNotif = {
@@ -221,7 +206,7 @@ function App() {
         const val = row[header] || '';
         return `"${String(val).replace(/"/g, '""')}"`;
       });
-      csvRows.push(values.join('\n'));
+      csvRows.push(values.join(','));
     });
     const csvContent = csvRows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -334,22 +319,30 @@ function App() {
   const handleTeacherAttendance = async () => {
     if (!navigator.geolocation) return alert("Location not supported");
     try {
+      setStatus('Checking records...');
+      const qCheck = query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today));
+      const checkSnap = await getDocs(qCheck);
+      if (!checkSnap.empty) {
+        alert("You have already marked attendance today");
+        addNotification("Attendance already exists for today", "warning");
+        setStatus('Already Marked');
+        return;
+      }
       setStatus('Verifying Location...');
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, SCHOOL_COORDS.lat, SCHOOL_COORDS.lng);
         if (dist <= 500) {
-          // Fix 1: Ensure ONE record per date via doc key naming convention
-          const docId = `${today}_${staffName.replace(/\s+/g, '_')}`;
-          await setDoc(doc(db, "teacher_attendance", docId), { 
+          // FIX: Prevent stale state by confirming write before update
+          await addDoc(collection(db, "teacher_attendance"), { 
             name: staffName, 
             date: today, 
             time: new Date().toLocaleTimeString(), 
             timestamp: serverTimestamp(), 
             distance: Math.round(dist) + "m" 
           });
-          
           alert("Attendance Marked!"); 
           setStatus('Done');
+          setTeacherSummary(prev => ({ ...prev, attendanceMarked: true }));
           addNotification("Attendance marked successfully", "success");
         } else { 
           alert(`Too far! ${Math.round(dist)}m.`); 
@@ -359,7 +352,7 @@ function App() {
       }, () => alert("Enable Location Access!"));
     } catch (e) {
       console.error(e);
-      alert("Error marking attendance");
+      alert("Error checking attendance");
       setStatus('Error');
     }
   };
@@ -413,14 +406,14 @@ function App() {
     }
 
     if (userRole === 'staff') {
-      const qLeaves = query(collection(db, "teacher_leaves"), where("name", "==", staffName), where("status", "==", "pending"));
-      const leaveSnap = await getDocs(qLeaves);
-      
-      setTeacherSummary(prev => ({
-        ...prev,
-        todayClasses: Object.keys(classStats).length,
-        pendingLeaves: leaveSnap.size
-      }));
+      const todayClasses = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
+      const myAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today)));
+      const myPendingLeaves = await getDocs(query(collection(db, "teacher_leaves"), where("name", "==", staffName), where("status", "==", "pending")));
+      setTeacherSummary({
+        todayClasses: todayClasses.size,
+        attendanceMarked: !myAtt.empty,
+        pendingLeaves: myPendingLeaves.size
+      });
       setSystemMessages([
         { id: 1, text: "Reminder: Please complete student attendance by 9:00 AM.", type: 'notice' },
         { id: 2, text: "Admin: Monthly staff meeting scheduled for Saturday.", type: 'admin' }
@@ -481,7 +474,6 @@ function App() {
     }
   };
 
-  // Extension: Mini Calendar Component
   const MiniCalendar = () => {
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -554,6 +546,7 @@ function App() {
                   ))}
                 </tbody>
               </table>
+              {previewData.length > 50 && <p style={{ textAlign:'center', fontSize:'11px', color:'#666', marginTop:'10px' }}>Showing first 50 of {previewData.length} records...</p>}
             </div>
             <div style={{ padding:'15px', borderTop:'1px solid #ddd', display:'flex', gap:'10px' }}>
               <button onClick={() => downloadCSV(previewData, previewHeaders, previewFileName)} style={{ ...actionBtn, flex:1, background:'#2ecc71' }}>Confirm Download CSV</button>
@@ -609,13 +602,18 @@ function App() {
             setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
             setView('teacher_attendance_view'); 
           }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
+          {userRole === 'admin' && <button onClick={async () => { 
+            const s = await getDocs(collection(db, "staff_records"));
+            setTeacherDirectory(s.docs.map(d => ({id: d.id, ...d.data()})));
+            setDirSearch('');
+            setView('teacher_directory'); 
+          }} style={getNavStyle('teacher_directory')}>📇 Directory</button>}
           <button onClick={() => { setIsLoggedIn(false); setNotifications([]); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
         
-        {/* Fix 2, 3, 5: Dynamic Dashboard Logic */}
         {userRole === 'staff' && view === 'dashboard' && (
           <div>
             <div style={{ ...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12' }}>
@@ -635,80 +633,276 @@ function App() {
               </div>
             </div>
 
-            {/* Fix 3: Dynamic Reminder Card */}
-            <div style={{ ...cardStyle, borderLeft: teacherSummary.attendanceMarked ? '6px solid #2ecc71' : '6px solid #e74c3c' }}>
-              <h4 style={{ marginTop: 0, fontSize: '14px' }}>{teacherSummary.attendanceMarked ? "✅ All caught up!" : "⚠️ Pending Tasks"}</h4>
-              {!teacherSummary.attendanceMarked && <div style={{ fontSize: '12px', color: '#e74c3c' }}>• Please mark your attendance for today.</div>}
-              {teacherSummary.pendingLeaves > 0 && <div style={{ fontSize: '12px', color: '#f39c12', marginTop: '5px' }}>• You have {teacherSummary.pendingLeaves} leave request(s) awaiting approval.</div>}
+            <div style={{ ...cardStyle, borderLeft: '6px solid #e74c3c' }}>
+              <h4 style={{ marginTop: 0, fontSize: '14px' }}>⚠️ Pending Tasks</h4>
+              {!teacherSummary.attendanceMarked && <div style={{ fontSize: '12px', color: '#e74c3c', marginBottom: '5px' }}>• Your attendance is not marked today.</div>}
+              {teacherSummary.pendingLeaves > 0 && <div style={{ fontSize: '12px', color: '#f39c12', marginBottom: '5px' }}>• You have {teacherSummary.pendingLeaves} leave request(s) awaiting approval.</div>}
+              {teacherSummary.attendanceMarked && teacherSummary.pendingLeaves === 0 && <div style={{ fontSize: '12px', color: '#2ecc71' }}>No urgent tasks pending!</div>}
             </div>
 
-            {/* Fix 5: Dynamic Motivational Line */}
             <div style={{ ...cardStyle, borderLeft: '6px solid #9b59b6', fontStyle: 'italic', fontSize: '13px', textAlign: 'center' }}>
               "{dailyQuote}"
             </div>
 
-            {/* Fix 4: School Calendar Section */}
             <div style={{ ...cardStyle, borderLeft: '6px solid #3498db' }}>
-              <h4 style={{ marginTop: 0, fontSize: '14px' }}>🗓️ School Calendar</h4>
-              {calendarEvents.length > 0 ? calendarEvents.map(e => (
-                <div key={e.id} style={{ fontSize: '11px', background: '#f8f9fa', padding: '6px', borderRadius: '6px', marginBottom: '4px', borderLeft: '3px solid #3498db' }}>
-                  <strong>{e.date}:</strong> {e.title}
+              <h4 style={{ marginTop: 0, fontSize: '14px' }}>📢 System Notices</h4>
+              {systemMessages.map(m => (
+                <div key={m.id} style={{ fontSize: '11px', background: '#f8f9fa', padding: '6px', borderRadius: '6px', marginBottom: '4px', borderLeft: '3px solid #3498db' }}>
+                  {m.text}
                 </div>
-              )) : <p style={{fontSize: '11px', color: '#999'}}>No upcoming events.</p>}
+              ))}
             </div>
 
             <div style={{ marginBottom: '15px' }}>
               <MiniCalendar />
             </div>
+
+            <div style={{ ...cardStyle, borderLeft: '6px solid #1a4a8e' }}>
+              <h4 style={{ marginTop: 0, fontSize: '14px' }}>🚀 Quick Class Switch</h4>
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                {CLASSES.slice(0, 5).map(c => (
+                  <button key={c} onClick={() => { setFilterClass(c); setView('sel_att'); }} style={{ padding: '6px 10px', fontSize: '10px', background: '#e8f0fe', border: '1px solid #1a4a8e', borderRadius: '5px', color: '#1a4a8e', cursor: 'pointer' }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* ... Rest of existing views (add, view, history, etc.) ... */}
-        {/* NOTE: Ensure handleTeacherAttendance and student marking logic uses setDoc with deterministic IDs like below */}
-        
-        {view === 'attendance' && (
-          <div>
-            <h3 style={{textAlign:'center', margin:'0 0 5px 0'}}>{filterClass} - {today}</h3>
-            {getFilteredRecords().map(r => (
-              <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div><div style={{fontWeight:'bold'}}>{r.student_name}</div><div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div></div>
-                <div>
-                  <button onClick={()=>setAttendance({...attendance, [r.id]:'P'})} style={{background:attendance[r.id]==='P'?'#2ecc71':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', marginRight:'5px'}}>P</button>
-                  <button onClick={()=>setAttendance({...attendance, [r.id]:'A'})} style={{background:attendance[r.id]==='A'?'#e74c3c':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px'}}>A</button>
+        {userRole === 'admin' && view === 'dashboard' && (
+          <>
+            <div style={{...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12'}}>
+              <h4 style={{marginTop: 0, marginBottom: '10px', display: 'flex', alignItems: 'center'}}>📊 Admin Overview Panel</h4>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Total Students</small><b style={{fontSize: '18px'}}>{adminAnalytics.totalStudents}</b></div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Total Staff</small><b style={{fontSize: '18px'}}>{adminAnalytics.totalStaff}</b></div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Today Stud. Present</small><b style={{fontSize: '18px'}}>{adminAnalytics.todayStudentAttendance}</b></div>
+                <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small><b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b></div>
+                <div onClick={async () => {
+                   const sRec = await getDocs(collection(db, "staff_records"));
+                   setStaffRecords(sRec.docs.map(d => ({id: d.id, ...d.data()})));
+                   const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
+                   setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
+                   const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
+                   setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
+                   setView('teacher_attendance_view');
+                }} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer'}}>
+                  <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small><b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
                 </div>
               </div>
+            </div>
+            <div style={{...cardStyle, borderLeft: '6px solid #9b59b6'}}>
+              <h4 style={{marginTop:0}}>🛡️ Data Protection</h4>
+              <button onClick={handleDownloadBackup} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#9b59b6'}}>Download Full Backup (JSON)</button>
+              <input type="file" accept=".json" onChange={handleRestoreBackup} style={{display: 'none'}} ref={fileInputRef} />
+              <button onClick={() => fileInputRef.current.click()} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#34495e'}}>Upload Backup & Restore</button>
+            </div>
+            <div style={cardStyle}>
+              <h4 style={{marginTop:0}}>📥 Data Backup (CSV)</h4>
+              <button onClick={handleExportStudents} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px'}}>Download Students CSV</button>
+              <button onClick={handleExportStaff} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#2ecc71'}}>Download Staff CSV</button>
+              <button onClick={handleExportTodayAttendance} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#7f8c8d'}}>Download Today Attendance CSV</button>
+            </div>
+          </>
+        )}
+
+        {view === 'teacher_directory' && (
+          <div>
+            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
+              <h3 style={{marginTop:0}}>📇 Teacher Directory</h3>
+              <input placeholder="Search Teacher Name..." value={dirSearch} onChange={(e) => setDirSearch(e.target.value)} style={{...inputStyle, marginBottom:0}} />
+            </div>
+            {teacherDirectory.filter(t => t.name?.toLowerCase().includes(dirSearch.toLowerCase())).map(t => (
+                <div key={t.id} style={cardStyle}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                    <div>
+                      <b style={{fontSize:'18px', color:'#1a4a8e'}}>{t.name}</b>
+                      <div style={{color:'#666', fontSize:'14px'}}>{t.role}</div>
+                      {t.whatsapp && <div style={{fontSize:'12px', color:'#999', marginTop:'5px'}}>📞 {t.whatsapp}</div>}
+                    </div>
+                    {t.whatsapp && <a href={`https://wa.me/${t.whatsapp}`} target="_blank" rel="noreferrer" style={{textDecoration:'none', background:'#25D366', color:'white', padding:'8px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:'bold', display:'flex', alignItems:'center', gap:'5px'}}><span>🟢</span> Chat</a>}
+                  </div>
+                </div>
             ))}
-            <button onClick={async ()=>{
-              try {
-                // Fix 1: Unique doc ID for student attendance records
-                const docId = `${today}_${filterClass.replace(/\s+/g, '_')}_${filterSection}`;
-                const attendancePayload = { class: filterClass, section_filter: filterSection, date: today, attendance_data: attendance, timestamp: serverTimestamp() };
-                
-                await setDoc(doc(db, "daily_attendance", docId), attendancePayload, { merge: true });
-                
-                addNotification(`Attendance submitted for ${filterClass}`, "success");
-                alert("Attendance Saved!"); setView('dashboard'); setAttendance({});
-              } catch (e) { alert("Error saving attendance"); }
-            }} style={actionBtn}>Submit Attendance</button>
+            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#7f8c8d'}}>Back to Dashboard</button>
           </div>
         )}
 
-        {/* Dynamic Teacher Mark Button (Quick Action) */}
         {userRole === 'staff' && view === 'dashboard' && (
           <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
-            <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background: teacherSummary.attendanceMarked ? '#ccc' : '#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }} disabled={teacherSummary.attendanceMarked}>
-              {teacherSummary.attendanceMarked ? "📍 Attendance Marked" : "📍 Mark My Attendance"}
-            </button>
+            <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
             <p style={{fontSize:'10px', color:'#666', marginTop:'5px'}}>Range: 500m | Status: {status}</p>
+            <button onClick={async () => {
+                try {
+                  if (!myProfileData && staffName) {
+                    const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
+                    const staffSnap = await getDocs(qStaff);
+                    if(!staffSnap.empty) setMyProfileData(staffSnap.docs[0].data());
+                  }
+                  const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName));
+                  const attSnap = await getDocs(qAtt);
+                  const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                  setMyAttendanceRecords(sortedAtt);
+                  const qLeaves = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
+                  const leaveSnap = await getDocs(qLeaves);
+                  setMyLeaveRecords(leaveSnap.docs.map(d => d.data()));
+                  setView('teacher_profile_view');
+                } catch (err) { alert("Error loading profile."); }
+              }} style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}>👤 View My Profile</button>
+            <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+               <button onClick={() => setView('apply_leave')} style={{ flex:1, padding:'12px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📄 Apply Leave</button>
+               <button onClick={async () => {
+                 const qL = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
+                 const lSnap = await getDocs(qL);
+                 setMyLeaves(lSnap.docs.map(d => ({id: d.id, ...d.data()})));
+                 setView('my_leaves');
+               }} style={{ flex:1, padding:'12px', background:'#7f8c8d', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📜 My Leaves</button>
+            </div>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
 
-const cardStyle = { background:'white', padding:'15px', borderRadius:'15px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)', marginBottom:'12px', borderLeft:'6px solid #f39c12' };
-const inputStyle = { width:'100%', padding:'12px', margin:'8px 0', borderRadius:'10px', border:'1px solid #ddd', boxSizing:'border-box', fontSize:'14px' };
-const actionBtn = { width:'100%', padding:'15px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'10px', fontWeight:'bold', cursor:'pointer', fontSize:'16px' };
+        {view === 'apply_leave' && (
+          <div style={cardStyle}>
+            <h3 style={{marginTop:0}}>Apply for Leave</h3>
+            <label style={{fontSize:'12px', color:'#666'}}>From Date</label>
+            <input type="date" value={leaveFrom} onChange={(e)=>setLeaveFrom(e.target.value)} style={inputStyle} />
+            <label style={{fontSize:'12px', color:'#666'}}>To Date</label>
+            <input type="date" value={leaveTo} onChange={(e)=>setLeaveTo(e.target.value)} style={inputStyle} />
+            <textarea placeholder="Reason for leave..." value={leaveReason} onChange={(e)=>setLeaveReason(e.target.value)} style={{...inputStyle, height:'80px', fontFamily:'inherit'}} />
+            <button onClick={async () => {
+              if(!leaveFrom || !leaveTo || !leaveReason) return alert("Fill all fields");
+              try {
+                await addDoc(collection(db, "teacher_leaves"), { name: staffName, fromDate: leaveFrom, toDate: leaveTo, reason: leaveReason, status: "pending", appliedAt: serverTimestamp() });
+                alert("Leave application submitted!");
+                addNotification("Leave request submitted successfully", "success");
+                setLeaveFrom(''); setLeaveTo(''); setLeaveReason(''); setView('dashboard');
+              } catch(e) { alert("Submission failed"); }
+            }} style={actionBtn}>Submit Application</button>
+            <button onClick={()=>setView('dashboard')} style={{...actionBtn, background:'#7f8c8d', marginTop:'10px'}}>Cancel</button>
+          </div>
+        )}
 
-export default App;
+        {view === 'my_leaves' && (
+          <div>
+            <h3>My Leave Requests</h3>
+            {myLeaves.length === 0 && <p style={{textAlign:'center', color:'#999'}}>No leaves applied yet.</p>}
+            {myLeaves.map(l => (
+              <div key={l.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}>
+                  <span>{l.fromDate} → {l.toDate}</span>
+                  <span style={{color: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12'}}>{l.status.toUpperCase()}</span>
+                </div>
+                <p style={{fontSize:'14px', margin:'10px 0', color:'#444'}}>{l.reason}</p>
+              </div>
+            ))}
+            <button onClick={()=>setView('dashboard')} style={actionBtn}>Back</button>
+          </div>
+        )}
+
+        {view === 'teacher_profile_view' && (myProfileData || selectedTeacherProfile) && (
+          <div>
+            <div style={cardStyle}>
+              <h2 style={{margin:0, color:'#1a4a8e'}}>{(myProfileData || selectedTeacherProfile).name}</h2>
+              <p style={{color:'#666', margin:'5px 0'}}>Role: {(myProfileData || selectedTeacherProfile).role}</p>
+              { (myProfileData || selectedTeacherProfile).salary && <p style={{color:'#666', margin:'5px 0'}}>Salary/Pay: {(myProfileData || selectedTeacherProfile).salary}</p> }
+              <div style={{marginTop:'10px', padding:'10px', background:'#f8f9fa', borderRadius:'8px', fontSize:'13px'}}>
+                <strong>Attendance Summary:</strong><br/>
+                Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave} | Absent: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalAbsent}
+              </div>
+              <button onClick={async () => {
+                   const currentStaffName = (myProfileData || selectedTeacherProfile).name;
+                   const qApproved = query(collection(db, "teacher_leaves"), where("name", "==", currentStaffName), where("status", "==", "approved"));
+                   const leaveSnap = await getDocs(qApproved);
+                   const approvedLeaveCount = leaveSnap.size;
+                   const presentCount = (userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).length;
+                   const reportBody = [
+                     ["--- SECTION 1: TEACHER INFO ---", "", "", ""],
+                     ["Name:", currentStaffName, "Role:", (myProfileData || selectedTeacherProfile).role],
+                     ["Salary/Pay:", (myProfileData || selectedTeacherProfile).salary || "N/A", "", ""],
+                     ["", "", "", ""],
+                     ["--- SECTION 2: ATTENDANCE SUMMARY ---", "", "", ""],
+                     ["Total Present:", presentCount, "Total Leave:", approvedLeaveCount],
+                     ["Total Absent:", 0, "", ""],
+                     ["", "", "", ""],
+                     ["--- SECTION 3: ATTENDANCE DETAILS ---", "", "", ""],
+                     ["Name", "Date", "Time", "Distance"],
+                     ...(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map(r => [currentStaffName, r.date, r.time, r.distance])
+                   ];
+                   downloadPDF("Teacher Professional Report", ["Field", "Value", "Field", "Value"], reportBody, `${currentStaffName}_Report`);
+                }} style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}>Download My Profile PDF</button>
+            </div>
+            <h4 style={{marginTop:'20px'}}>Attendance History</h4>
+            {(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map((r, idx) => (
+              <div key={idx} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}><b>{r.date}</b><span>{r.time}</span></div>
+                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📍 Distance: {r.distance}</div>
+              </div>
+            ))}
+            <button onClick={() => setView(userRole === 'admin' ? 'teacher_attendance_view' : 'dashboard')} style={{...actionBtn, marginTop:'10px', background:'#7f8c8d'}}>Back</button>
+          </div>
+        )}
+
+        {view === 'dashboard' && (
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+            {CLASSES.map(c => (
+              <div key={c} onClick={async () => {
+                setFilterClass(c);
+                const q = query(collection(db, "ali_campus_records"), where("class", "==", c));
+                const snap = await getDocs(q);
+                setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                setView(userRole === 'admin' ? 'view' : 'attendance');
+              }} style={cardStyle}>
+                <small style={{color:'#1a4a8e'}}>{c}</small>
+                <div style={{fontSize:'22px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {view === 'add' && (
+          <div style={cardStyle}>
+            <h3 style={{marginTop:0}}>{editingStudent ? "Edit Student" : "New Admission"}</h3>
+            <input placeholder="Student Name" value={name} onChange={(e)=>setName(e.target.value)} style={inputStyle} />
+            <input placeholder="Roll Number" value={rollNo} onChange={(e)=>setRollNo(e.target.value)} style={inputStyle} />
+            <input placeholder="WhatsApp (e.g. 92300...)" value={whatsapp} onChange={(e)=>setWhatsapp(e.target.value)} style={inputStyle} />
+            <input type="number" placeholder="Monthly Fee" value={baseFee} onChange={(e)=>setBaseFee(e.target.value)} style={inputStyle} />
+            <input type="number" placeholder="Arrears (Baqaya)" value={arrears} onChange={(e)=>setArrears(e.target.value)} style={inputStyle} />
+            <select value={selectedClass} onChange={(e)=>setSelectedClass(e.target.value)} style={inputStyle}>
+              {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={selectedSection} onChange={(e)=>setSelectedSection(e.target.value)} style={inputStyle}>
+              <option value="">No Section (General)</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}
+            </select>
+            <button onClick={async () => {
+              if(!name || !rollNo) return alert("Fill Name and Roll Number");
+              const d = { student_name:name, roll_number:rollNo, parent_whatsapp:whatsapp, class:selectedClass, section:selectedSection, base_fee:Number(baseFee), arrears:Number(arrears) };
+              try {
+                if (editingStudent) {
+                   await updateDoc(doc(db,"ali_campus_records",editingStudent.id), d);
+                   addNotification(`Updated student: ${name}`, "success");
+                } else {
+                   await addDoc(collection(db,"ali_campus_records"), {...d, created_at:serverTimestamp()});
+                   addNotification(`New admission: ${name} (Roll: ${rollNo})`, "success");
+                }
+                alert("Saved!"); setView('dashboard'); clearInputs();
+              } catch (e) { alert("Error Saving Data"); }
+            }} style={actionBtn}>Save Student</button>
+          </div>
+        )}
+
+        {view === 'view' && (
+          <div>
+            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
+                <h4 style={{margin:'0 0 10px 0'}}>Smart Filter</h4>
+                <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}><input placeholder="Search Name or Roll No..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, margin:0}} /></div>
+                <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
+                    <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'120px'}}><option value="All">All Classes</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                    <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'100px'}}><option value="All">All Sections</option><option value="General">General</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}</select>
+                    <button onClick={() => { setSearchQuery(''); setClassFilter('All'); setFilterSection('All'); }} style={{background:'#7f8c8d', color:'white', border:'none', borderRadius:'10px', padding:'10px 15px', fontWeight:'bold', width:'100%', marginTop:'5px'}}>Clear Filters</button>
+                </div>
+            </div>
+            {getFilteredRecords().map(r => (
+              <div key={r.id} style={cardStyle}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><span><b>{r.student_name}</b> ({r.roll_number})</span><a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{textDecoration:'none', color:'#25D366', fontWeight:'bold'}}><span style={{fontSize:'16px'}}>🟢</span> WhatsApp</a></div>
+                <div style={{fontSize:'12px', color:'#666',
