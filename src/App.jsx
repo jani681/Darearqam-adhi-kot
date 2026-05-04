@@ -104,7 +104,6 @@ function App() {
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
-    // Persistent Motivational Line logic - FIX: Stable date-based rotation to prevent mismatches
     const dayOfMonth = new Date().getDate();
     const quoteIndex = dayOfMonth % MOTIVATIONS.length;
     setDailyQuote(MOTIVATIONS[quoteIndex]);
@@ -184,7 +183,7 @@ function App() {
 
   const getFilteredRecords = () => {
     return records.filter(r => {
-      const matchesSearch = r.student_name.toLowerCase().includes(searchQuery.toLowerCase()) || r.roll_number.toString().includes(searchQuery);
+      const matchesSearch = r.student_name?.toLowerCase().includes(searchQuery.toLowerCase()) || r.roll_number?.toString().includes(searchQuery);
       const matchesClass = classFilter === 'All' || r.class === classFilter;
       const matchesSection = filterSection === 'All' || (r.section || 'General') === filterSection;
       return matchesSearch && matchesClass && matchesSection;
@@ -334,7 +333,6 @@ function App() {
           });
           alert("Attendance Marked!"); 
           setStatus('Done');
-          // FIX: Call fetchStats to sync DB states and clear reminders globally
           fetchStats();
           addNotification("Attendance marked successfully", "success");
         } else { 
@@ -399,13 +397,11 @@ function App() {
     }
 
     if (userRole === 'staff') {
-      // FIX: Dynamically fetch data and update notifications safely
       const studentAttSnap = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
       const todayClasses = studentAttSnap.size;
       const myAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today)));
       const myPendingLeaves = await getDocs(query(collection(db, "teacher_leaves"), where("name", "==", staffName), where("status", "==", "pending")));
       
-      // Load events data for mini-calendar fix
       const allMyAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName)));
       setMyAttendanceRecords(allMyAtt.docs.map(d => d.data()));
 
@@ -415,7 +411,6 @@ function App() {
         pendingLeaves: myPendingLeaves.size
       });
       
-      // FIX: Database-synced pending task reminder clearing
       const msgs = [
         { id: 2, text: "Admin: Monthly staff meeting scheduled for Saturday.", type: 'admin' }
       ];
@@ -479,7 +474,6 @@ function App() {
     }
   };
 
-  // FIX: Populate empty calendar using dynamic attendance database events
   const MiniCalendar = ({ events = [] }) => {
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -630,7 +624,6 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
         
-        {/* TEACHER DASHBOARD EXTENSIONS */}
         {userRole === 'staff' && view === 'dashboard' && (
           <div>
             <div style={{ ...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12' }}>
@@ -954,14 +947,12 @@ function App() {
             ))}
             <button onClick={async ()=>{
               try {
-                // FIX: Query strictly by Class and Date to guarantee 1 doc per class/day (prevent section-level duplicates)
                 const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("date", "==", today));
                 const checkSnap = await getDocs(qCheck);
                 
                 if (!checkSnap.empty) {
                   const existingDoc = checkSnap.docs[0];
                   const existingData = existingDoc.data().attendance_data || {};
-                  // Merge so we don't overwrite previous sections' data
                   const mergedAttendance = { ...existingData, ...attendance };
                   const attendancePayload = { class: filterClass, date: today, attendance_data: mergedAttendance, timestamp: serverTimestamp() };
                   
@@ -978,8 +969,6 @@ function App() {
                 setAttendance({}); 
                 setSearchQuery(''); 
                 setFilterSection('All');
-                
-                // FIX: Immediately fetch stats to clear pending task reminders in dashboard
                 fetchStats();
               } catch (e) { alert("Error saving attendance"); }
             }} style={actionBtn}>Submit Attendance</button>
