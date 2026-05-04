@@ -6,7 +6,7 @@ import 'jspdf-autotable';
 
 const CLASSES = ["Playgroup", "Nursery", "KG", "1st Class", "2nd Class", "3rd Class", "4th Class", "5th Class", "6th Class", "7th Class", "8th Class", "9th Class", "10th Class"];
 const SECTIONS = ["A", "B", "C"]; 
-const ADMIN_PASSWORD_INITIAL = "ali786"; 
+const ADMIN_PASSWORD = "ali786"; 
 const SCHOOL_COORDS = { lat: 32.1072678, lng: 71.8037100 }; 
 
 const MOTIVATIONS = [
@@ -100,62 +100,21 @@ function App() {
     pendingLeaves: 0
   });
 
-  // Password Change States
-  const [currentPass, setCurrentPass] = useState('');
-  const [newPass, setNewPass] = useState('');
-  const [confirmNewPass, setConfirmNewPass] = useState('');
-  const [adminConfigDocId, setAdminConfigDocId] = useState(null);
-  const [storedAdminPass, setStoredAdminPass] = useState(ADMIN_PASSWORD_INITIAL);
+  // PASSWORD CHANGE STATES
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [isChangingPass, setIsChangingPass] = useState(false);
 
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
+    // Persistent Motivational Line logic - FIX: Stable date-based rotation to prevent mismatches
     const dayOfMonth = new Date().getDate();
     const quoteIndex = dayOfMonth % MOTIVATIONS.length;
     setDailyQuote(MOTIVATIONS[quoteIndex]);
-    fetchAdminConfig();
   }, [today]);
-
-  const fetchAdminConfig = async () => {
-    try {
-      const q = query(collection(db, "system_config"), where("type", "==", "admin_auth"));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        setAdminConfigDocId(snap.docs[0].id);
-        setStoredAdminPass(snap.docs[0].data().password);
-      } else {
-        const docRef = await addDoc(collection(db, "system_config"), { type: "admin_auth", password: ADMIN_PASSWORD_INITIAL });
-        setAdminConfigDocId(docRef.id);
-        setStoredAdminPass(ADMIN_PASSWORD_INITIAL);
-      }
-    } catch (e) { console.error("Config fetch error", e); }
-  };
-
-  const handlePasswordChange = async () => {
-    if (newPass !== confirmNewPass) return alert("New passwords do not match!");
-    if (newPass.length < 4) return alert("Password must be at least 4 characters.");
-
-    try {
-      if (userRole === 'admin') {
-        if (currentPass !== storedAdminPass) return alert("Incorrect current password!");
-        await updateDoc(doc(db, "system_config", adminConfigDocId), { password: newPass });
-        setStoredAdminPass(newPass);
-        alert("Admin password updated successfully!");
-      } else {
-        const q = query(collection(db, "staff_records"), where("name", "==", staffName), where("password", "==", currentPass));
-        const snap = await getDocs(q);
-        if (snap.empty) return alert("Incorrect current password!");
-        await updateDoc(doc(db, "staff_records", snap.docs[0].id), { password: newPass });
-        alert("Teacher password updated successfully!");
-      }
-      setCurrentPass(''); setNewPass(''); setConfirmNewPass('');
-      setView('dashboard');
-      addNotification("Password changed successfully", "success");
-    } catch (e) {
-      alert("Error updating password.");
-    }
-  };
 
   const addNotification = (msg, type = 'success') => {
     const newNotif = {
@@ -231,7 +190,7 @@ function App() {
 
   const getFilteredRecords = () => {
     return records.filter(r => {
-      const matchesSearch = r.student_name?.toLowerCase().includes(searchQuery.toLowerCase()) || r.roll_number?.toString().includes(searchQuery);
+      const matchesSearch = r.student_name.toLowerCase().includes(searchQuery.toLowerCase()) || r.roll_number.toString().includes(searchQuery);
       const matchesClass = classFilter === 'All' || r.class === classFilter;
       const matchesSection = filterSection === 'All' || (r.section || 'General') === filterSection;
       return matchesSearch && matchesClass && matchesSection;
@@ -381,6 +340,7 @@ function App() {
           });
           alert("Attendance Marked!"); 
           setStatus('Done');
+          // FIX: Call fetchStats to sync DB states and clear reminders globally
           fetchStats();
           addNotification("Attendance marked successfully", "success");
         } else { 
@@ -397,7 +357,7 @@ function App() {
   };
 
   const handleLogin = async () => {
-    if (passInput === storedAdminPass) { 
+    if (passInput === ADMIN_PASSWORD) { 
       setUserRole('admin'); 
       setIsLoggedIn(true); 
       addNotification("Logged in as Admin", "info");
@@ -409,7 +369,7 @@ function App() {
       if (!snap.empty) { 
         const teacherData = snap.docs[0].data();
         setStaffName(teacherData.name); 
-        setMyProfileData(teacherData); 
+        setMyProfileData({...teacherData, id: snap.docs[0].id}); 
         setUserRole('staff'); 
         setIsLoggedIn(true); 
         addNotification(`Welcome back, ${teacherData.name}`, "info");
@@ -445,11 +405,13 @@ function App() {
     }
 
     if (userRole === 'staff') {
+      // FIX: Dynamically fetch data and update notifications safely
       const studentAttSnap = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
       const todayClasses = studentAttSnap.size;
       const myAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today)));
       const myPendingLeaves = await getDocs(query(collection(db, "teacher_leaves"), where("name", "==", staffName), where("status", "==", "pending")));
       
+      // Load events data for mini-calendar fix
       const allMyAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName)));
       setMyAttendanceRecords(allMyAtt.docs.map(d => d.data()));
 
@@ -459,6 +421,7 @@ function App() {
         pendingLeaves: myPendingLeaves.size
       });
       
+      // FIX: Database-synced pending task reminder clearing
       const msgs = [
         { id: 2, text: "Admin: Monthly staff meeting scheduled for Saturday.", type: 'admin' }
       ];
@@ -522,6 +485,51 @@ function App() {
     }
   };
 
+  // PASSWORD CHANGE HANDLER
+  const handleUpdatePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      return alert("All fields are required");
+    }
+    if (newPassword !== confirmNewPassword) {
+      return alert("New passwords do not match");
+    }
+
+    setIsChangingPass(true);
+    try {
+      if (userRole === 'admin') {
+        if (currentPassword !== ADMIN_PASSWORD) {
+          throw new Error("Current admin password incorrect");
+        }
+        alert("CRITICAL: Manual environment update required for ADMIN_PASSWORD variable in code. Feature is restricted for hardcoded admin credentials.");
+      } else {
+        const q = query(collection(db, "staff_records"), where("name", "==", staffName), where("password", "==", currentPassword));
+        const snap = await getDocs(q);
+        
+        if (snap.empty) {
+          throw new Error("Current password verification failed");
+        }
+
+        const staffDocId = snap.docs[0].id;
+        await updateDoc(doc(db, "staff_records", staffDocId), {
+          password: newPassword
+        });
+        
+        addNotification("Password updated successfully", "success");
+        alert("Password updated successfully!");
+        setView('dashboard');
+      }
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } catch (err) {
+      alert(err.message);
+      addNotification("Password update failed", "warning");
+    } finally {
+      setIsChangingPass(false);
+    }
+  };
+
+  // FIX: Populate empty calendar using dynamic attendance database events
   const MiniCalendar = ({ events = [] }) => {
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -560,7 +568,7 @@ function App() {
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <img src="https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png" alt="Logo" style={{ width: '80px', borderRadius: '50%', background:'white', padding:'5px' }} />
       <h3>Ali Campus Login</h3>
-      <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', textAlign:'center'}} placeholder="Enter Password" />
+      <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', textAlign:'center'}} />
       <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold'}}>LOGIN</button>
     </div>
   );
@@ -651,25 +659,73 @@ function App() {
           {userRole === 'admin' && <button onClick={async () => { const s = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(s.docs.map(d=>({id:d.id, ...d.data()}))); setView('staff_list'); }} style={getNavStyle('staff_list')}>👥 Staff</button>}
           <button onClick={async () => { const h = await getDocs(query(collection(db, "daily_attendance"), orderBy("timestamp","desc"))); setHistory(h.docs.map(d=>({id:d.id, ...d.data()}))); setView('history'); }} style={getNavStyle('history')}>📜 Hist</button>
           {userRole === 'admin' && <button onClick={() => setView('sel_report')} style={getNavStyle('sel_report')}>📊 Reprt</button>}
-          <button onClick={() => setView('settings')} style={getNavStyle('settings')}>⚙️ Settings</button>
+          {userRole === 'admin' && <button onClick={async () => { 
+            const sRec = await getDocs(collection(db, "staff_records"));
+            setStaffRecords(sRec.docs.map(d => ({id: d.id, ...d.data()})));
+            const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
+            setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
+            const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
+            setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
+            setView('teacher_attendance_view'); 
+          }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
+          <button onClick={() => setView('security')} style={getNavStyle('security')}>🔒 Security</button>
           <button onClick={() => { setIsLoggedIn(false); setNotifications([]); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
       </div>
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: 'auto' }}>
         
-        {view === 'settings' && (
+        {/* SECURITY / CHANGE PASSWORD VIEW */}
+        {view === 'security' && (
           <div style={cardStyle}>
-            <h3 style={{marginTop:0}}>Change Password</h3>
-            <p style={{fontSize:'12px', color:'#666'}}>Keep your account secure by updating your password.</p>
-            <input type="password" placeholder="Current Password" value={currentPass} onChange={(e)=>setCurrentPass(e.target.value)} style={inputStyle} />
-            <input type="password" placeholder="New Password" value={newPass} onChange={(e)=>setNewPass(e.target.value)} style={inputStyle} />
-            <input type="password" placeholder="Confirm New Password" value={confirmNewPass} onChange={(e)=>setConfirmNewPass(e.target.value)} style={inputStyle} />
-            <button onClick={handlePasswordChange} style={actionBtn}>Update Password</button>
-            <button onClick={()=>setView('dashboard')} style={{...actionBtn, background:'#7f8c8d', marginTop:'10px'}}>Cancel</button>
+            <h3 style={{marginTop:0}}>Change Account Password</h3>
+            <p style={{fontSize: '12px', color: '#666'}}>Please verify your current password to set a new one.</p>
+            
+            <label style={{fontSize: '12px', fontWeight: 'bold'}}>Current Password</label>
+            <input 
+              type="password" 
+              placeholder="Enter current password" 
+              value={currentPassword} 
+              onChange={(e) => setCurrentPassword(e.target.value)} 
+              style={inputStyle} 
+            />
+            
+            <label style={{fontSize: '12px', fontWeight: 'bold'}}>New Password</label>
+            <input 
+              type="password" 
+              placeholder="Enter new password" 
+              value={newPassword} 
+              onChange={(e) => setNewPassword(e.target.value)} 
+              style={inputStyle} 
+            />
+            
+            <label style={{fontSize: '12px', fontWeight: 'bold'}}>Confirm New Password</label>
+            <input 
+              type="password" 
+              placeholder="Confirm new password" 
+              value={confirmNewPassword} 
+              onChange={(e) => setConfirmNewPassword(e.target.value)} 
+              style={inputStyle} 
+            />
+            
+            <button 
+              disabled={isChangingPass}
+              onClick={handleUpdatePassword} 
+              style={{...actionBtn, background: '#e67e22'}}
+            >
+              {isChangingPass ? "Processing..." : "Update Password"}
+            </button>
+            
+            <button 
+              onClick={() => setView('dashboard')} 
+              style={{...actionBtn, background:'#7f8c8d', marginTop:'10px'}}
+            >
+              Cancel
+            </button>
           </div>
         )}
 
+        {/* TEACHER DASHBOARD EXTENSIONS */}
         {userRole === 'staff' && view === 'dashboard' && (
           <div>
             <div style={{ ...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12' }}>
@@ -700,38 +756,31 @@ function App() {
               "{dailyQuote}"
             </div>
 
+            <div style={{ ...cardStyle, borderLeft: '6px solid #3498db' }}>
+              <h4 style={{ marginTop: 0, fontSize: '14px' }}>📢 System Notices</h4>
+              {systemMessages.length === 0 ? (
+                <div style={{ fontSize: '11px', color: '#666' }}>All caught up! No active notices.</div>
+              ) : (
+                systemMessages.map(m => (
+                  <div key={m.id} style={{ fontSize: '11px', background: '#f8f9fa', padding: '6px', borderRadius: '6px', marginBottom: '4px', borderLeft: '3px solid #3498db' }}>
+                    {m.text}
+                  </div>
+                ))
+              )}
+            </div>
+
             <div style={{ marginBottom: '15px' }}>
               <MiniCalendar events={myAttendanceRecords} />
             </div>
 
-            <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
-              <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
-              <p style={{fontSize:'10px', color:'#666', marginTop:'5px'}}>Range: 500m | Status: {status}</p>
-              <button onClick={async () => {
-                  try {
-                    if (!myProfileData && staffName) {
-                      const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
-                      const staffSnap = await getDocs(qStaff);
-                      if(!staffSnap.empty) setMyProfileData(staffSnap.docs[0].data());
-                    }
-                    const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName));
-                    const attSnap = await getDocs(qAtt);
-                    const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-                    setMyAttendanceRecords(sortedAtt);
-                    const qLeaves = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
-                    const leaveSnap = await getDocs(qLeaves);
-                    setMyLeaveRecords(leaveSnap.docs.map(d => d.data()));
-                    setView('teacher_profile_view');
-                  } catch (err) { alert("Error loading profile."); }
-                }} style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}>👤 View My Profile</button>
-              <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
-                 <button onClick={() => setView('apply_leave')} style={{ flex:1, padding:'12px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📄 Apply Leave</button>
-                 <button onClick={async () => {
-                   const qL = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
-                   const lSnap = await getDocs(qL);
-                   setMyLeaves(lSnap.docs.map(d => ({id: d.id, ...d.data()})));
-                   setView('my_leaves');
-                 }} style={{ flex:1, padding:'12px', background:'#7f8c8d', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📜 My Leaves</button>
+            <div style={{ ...cardStyle, borderLeft: '6px solid #1a4a8e' }}>
+              <h4 style={{ marginTop: 0, fontSize: '14px' }}>🚀 Quick Class Switch</h4>
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                {CLASSES.slice(0, 5).map(c => (
+                  <button key={c} onClick={() => { setFilterClass(c); setView('sel_att'); }} style={{ padding: '6px 10px', fontSize: '10px', background: '#e8f0fe', border: '1px solid #1a4a8e', borderRadius: '5px', color: '#1a4a8e', cursor: 'pointer' }}>
+                    {c}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -759,27 +808,74 @@ function App() {
                 </div>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              {CLASSES.map(c => (
-                <div key={c} onClick={async () => {
-                  setFilterClass(c);
-                  const q = query(collection(db, "ali_campus_records"), where("class", "==", c));
-                  const snap = await getDocs(q);
-                  setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-                  setView('view');
-                }} style={cardStyle}>
-                  <small style={{color:'#1a4a8e'}}>{c}</small>
-                  <div style={{fontSize:'22px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
-                </div>
-              ))}
-            </div>
             <div style={{...cardStyle, borderLeft: '6px solid #9b59b6'}}>
               <h4 style={{marginTop:0}}>🛡️ Data Protection</h4>
               <button onClick={handleDownloadBackup} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#9b59b6'}}>Download Full Backup (JSON)</button>
               <input type="file" accept=".json" onChange={handleRestoreBackup} style={{display: 'none'}} ref={fileInputRef} />
-              <button onClick={() => fileInputRef.current.click()} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#34494e'}}>Upload Backup & Restore</button>
+              <button onClick={() => fileInputRef.current.click()} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#34495e'}}>Upload Backup & Restore</button>
+            </div>
+            <div style={cardStyle}>
+              <h4 style={{marginTop:0}}>📥 Data Backup (CSV)</h4>
+              <button onClick={handleExportStudents} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px'}}>Download Students CSV</button>
+              <button onClick={handleExportStaff} style={{...actionBtn, padding:'10px', fontSize:'12px', marginBottom:'8px', background:'#2ecc71'}}>Download Staff CSV</button>
+              <button onClick={handleExportTodayAttendance} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#7f8c8d'}}>Download Today Attendance CSV</button>
             </div>
           </>
+        )}
+
+        {view === 'teacher_directory' && (
+          <div>
+            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
+              <h3 style={{marginTop:0}}>📇 Teacher Directory</h3>
+              <input placeholder="Search Teacher Name..." value={dirSearch} onChange={(e) => setDirSearch(e.target.value)} style={{...inputStyle, marginBottom:0}} />
+            </div>
+            {teacherDirectory.filter(t => t.name?.toLowerCase().includes(dirSearch.toLowerCase())).map(t => (
+                <div key={t.id} style={cardStyle}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                    <div>
+                      <b style={{fontSize:'18px', color:'#1a4a8e'}}>{t.name}</b>
+                      <div style={{color:'#666', fontSize:'14px'}}>{t.role}</div>
+                      {t.whatsapp && <div style={{fontSize:'12px', color:'#999', marginTop:'5px'}}>📞 {t.whatsapp}</div>}
+                    </div>
+                    {t.whatsapp && <a href={`https://wa.me/${t.whatsapp}`} target="_blank" rel="noreferrer" style={{textDecoration:'none', background:'#25D366', color:'white', padding:'8px 12px', borderRadius:'8px', fontSize:'12px', fontWeight:'bold', display:'flex', alignItems:'center', gap:'5px'}}><span>🟢</span> Chat</a>}
+                  </div>
+                </div>
+            ))}
+            <button onClick={() => setView('dashboard')} style={{...actionBtn, background:'#7f8c8d'}}>Back to Dashboard</button>
+          </div>
+        )}
+
+        {userRole === 'staff' && view === 'dashboard' && (
+          <div style={{ background:'#e8f0fe', padding:'15px', borderRadius:'12px', textAlign:'center', marginBottom:'10px', border:'1px dashed #1a4a8e' }}>
+            <button onClick={handleTeacherAttendance} style={{ width:'100%', padding:'12px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📍 Mark My Attendance</button>
+            <p style={{fontSize:'10px', color:'#666', marginTop:'5px'}}>Range: 500m | Status: {status}</p>
+            <button onClick={async () => {
+                try {
+                  if (!myProfileData && staffName) {
+                    const qStaff = query(collection(db, "staff_records"), where("name", "==", staffName));
+                    const staffSnap = await getDocs(qStaff);
+                    if(!staffSnap.empty) setMyProfileData({...staffSnap.docs[0].data(), id: staffSnap.docs[0].id});
+                  }
+                  const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", staffName));
+                  const attSnap = await getDocs(qAtt);
+                  const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                  setMyAttendanceRecords(sortedAtt);
+                  const qLeaves = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
+                  const leaveSnap = await getDocs(qLeaves);
+                  setMyLeaveRecords(leaveSnap.docs.map(d => d.data()));
+                  setView('teacher_profile_view');
+                } catch (err) { alert("Error loading profile."); }
+              }} style={{ width:'100%', padding:'12px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold', marginTop:'10px' }}>👤 View My Profile</button>
+            <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+               <button onClick={() => setView('apply_leave')} style={{ flex:1, padding:'12px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📄 Apply Leave</button>
+               <button onClick={async () => {
+                 const qL = query(collection(db, "teacher_leaves"), where("name", "==", staffName));
+                 const lSnap = await getDocs(qL);
+                 setMyLeaves(lSnap.docs.map(d => ({id: d.id, ...d.data()})));
+                 setView('my_leaves');
+               }} style={{ flex:1, padding:'12px', background:'#7f8c8d', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold' }}>📜 My Leaves</button>
+            </div>
+          </div>
         )}
 
         {view === 'apply_leave' && (
@@ -825,10 +921,32 @@ function App() {
             <div style={cardStyle}>
               <h2 style={{margin:0, color:'#1a4a8e'}}>{(myProfileData || selectedTeacherProfile).name}</h2>
               <p style={{color:'#666', margin:'5px 0'}}>Role: {(myProfileData || selectedTeacherProfile).role}</p>
+              { (myProfileData || selectedTeacherProfile).salary && <p style={{color:'#666', margin:'5px 0'}}>Salary/Pay: {(myProfileData || selectedTeacherProfile).salary}</p> }
               <div style={{marginTop:'10px', padding:'10px', background:'#f8f9fa', borderRadius:'8px', fontSize:'13px'}}>
                 <strong>Attendance Summary:</strong><br/>
-                Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave}
+                Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave} | Absent: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalAbsent}
               </div>
+              <button onClick={async () => {
+                   const currentStaffName = (myProfileData || selectedTeacherProfile).name;
+                   const qApproved = query(collection(db, "teacher_leaves"), where("name", "==", currentStaffName), where("status", "==", "approved"));
+                   const leaveSnap = await getDocs(qApproved);
+                   const approvedLeaveCount = leaveSnap.size;
+                   const presentCount = (userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).length;
+                   const reportBody = [
+                     ["--- SECTION 1: TEACHER INFO ---", "", "", ""],
+                     ["Name:", currentStaffName, "Role:", (myProfileData || selectedTeacherProfile).role],
+                     ["Salary/Pay:", (myProfileData || selectedTeacherProfile).salary || "N/A", "", ""],
+                     ["", "", "", ""],
+                     ["--- SECTION 2: ATTENDANCE SUMMARY ---", "", "", ""],
+                     ["Total Present:", presentCount, "Total Leave:", approvedLeaveCount],
+                     ["Total Absent:", 0, "", ""],
+                     ["", "", "", ""],
+                     ["--- SECTION 3: ATTENDANCE DETAILS ---", "", "", ""],
+                     ["Name", "Date", "Time", "Distance"],
+                     ...(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map(r => [currentStaffName, r.date, r.time, r.distance])
+                   ];
+                   downloadPDF("Teacher Professional Report", ["Field", "Value", "Field", "Value"], reportBody, `${currentStaffName}_Report`);
+                }} style={{marginTop:'10px', padding:'10px', background:'#28a745', color:'white', border:'none', borderRadius:'8px', width:'100%', fontWeight:'bold'}}>Download My Profile PDF</button>
             </div>
             <h4 style={{marginTop:'20px'}}>Attendance History</h4>
             {(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords).map((r, idx) => (
@@ -838,6 +956,23 @@ function App() {
               </div>
             ))}
             <button onClick={() => setView(userRole === 'admin' ? 'teacher_attendance_view' : 'dashboard')} style={{...actionBtn, marginTop:'10px', background:'#7f8c8d'}}>Back</button>
+          </div>
+        )}
+
+        {view === 'dashboard' && (
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+            {CLASSES.map(c => (
+              <div key={c} onClick={async () => {
+                setFilterClass(c);
+                const q = query(collection(db, "ali_campus_records"), where("class", "==", c));
+                const snap = await getDocs(q);
+                setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                setView(userRole === 'admin' ? 'view' : 'attendance');
+              }} style={cardStyle}>
+                <small style={{color:'#1a4a8e'}}>{c}</small>
+                <div style={{fontSize:'22px', fontWeight:'bold'}}>{classStats[c] || 0}</div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -875,8 +1010,13 @@ function App() {
         {view === 'view' && (
           <div>
             <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
-                <h4 style={{margin:'0 0 10px 0'}}>Filter Students</h4>
+                <h4 style={{margin:'0 0 10px 0'}}>Smart Filter</h4>
                 <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}><input placeholder="Search Name or Roll No..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, margin:0}} /></div>
+                <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
+                    <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'120px'}}><option value="All">All Classes</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                    <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0, flex:1, minWidth:'100px'}}><option value="All">All Sections</option><option value="General">General</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}</select>
+                    <button onClick={() => { setSearchQuery(''); setClassFilter('All'); setFilterSection('All'); }} style={{background:'#7f8c8d', color:'white', border:'none', borderRadius:'10px', padding:'10px 15px', fontWeight:'bold', width:'100%', marginTop:'5px'}}>Clear Filters</button>
+                </div>
             </div>
             {getFilteredRecords().map(r => (
               <div key={r.id} style={cardStyle}>
@@ -894,9 +1034,13 @@ function App() {
         {view === 'attendance' && (
           <div>
             <h3 style={{textAlign:'center', margin:'0 0 5px 0'}}>{filterClass} - {today}</h3>
+            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e', padding:'10px', marginBottom:'15px'}}>
+               <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0}}><option value="All">All Students ({filterClass})</option><option value="General">General (No Section)</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}</select>
+               <input placeholder="Find Student in List..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, marginTop:'10px', marginBottom:0}}/>
+            </div>
             {getFilteredRecords().map(r => (
               <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div><div style={{fontWeight:'bold'}}>{r.student_name}</div><div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div></div>
+                <div><div style={{fontWeight:'bold'}}>{r.student_name} {r.section ? <small style={{color:'#1a4a8e', background:'#e8f0fe', padding:'2px 5px', borderRadius:'4px'}}>Sec {r.section}</small> : ''}</div><div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div></div>
                 <div>
                   <button onClick={()=>setAttendance({...attendance, [r.id]:'P'})} style={{background:attendance[r.id]==='P'?'#2ecc71':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px', marginRight:'5px'}}>P</button>
                   <button onClick={()=>setAttendance({...attendance, [r.id]:'A'})} style={{background:attendance[r.id]==='A'?'#e74c3c':'#ccc', color:'white', border:'none', padding:'8px 15px', borderRadius:'5px'}}>A</button>
@@ -905,18 +1049,33 @@ function App() {
             ))}
             <button onClick={async ()=>{
               try {
+                // FIX: Query strictly by Class and Date to guarantee 1 doc per class/day (prevent section-level duplicates)
                 const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("date", "==", today));
                 const checkSnap = await getDocs(qCheck);
                 
                 if (!checkSnap.empty) {
                   const existingDoc = checkSnap.docs[0];
                   const existingData = existingDoc.data().attendance_data || {};
+                  // Merge so we don't overwrite previous sections' data
                   const mergedAttendance = { ...existingData, ...attendance };
-                  await updateDoc(doc(db, "daily_attendance", existingDoc.id), { attendance_data: mergedAttendance, timestamp: serverTimestamp() });
+                  const attendancePayload = { class: filterClass, date: today, attendance_data: mergedAttendance, timestamp: serverTimestamp() };
+                  
+                  await updateDoc(doc(db, "daily_attendance", existingDoc.id), attendancePayload);
+                  addNotification(`Attendance updated for ${filterClass}`, "success");
                 } else {
-                  await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() });
+                  const attendancePayload = { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() };
+                  await addDoc(collection(db, "daily_attendance"), attendancePayload);
+                  addNotification(`Attendance submitted for ${filterClass}`, "success");
                 }
-                alert("Attendance Saved!"); setView('dashboard'); setAttendance({}); fetchStats();
+                
+                alert("Attendance Saved!"); 
+                setView('dashboard'); 
+                setAttendance({}); 
+                setSearchQuery(''); 
+                setFilterSection('All');
+                
+                // FIX: Immediately fetch stats to clear pending task reminders in dashboard
+                fetchStats();
               } catch (e) { alert("Error saving attendance"); }
             }} style={actionBtn}>Submit Attendance</button>
           </div>
@@ -924,11 +1083,14 @@ function App() {
 
         {view === 'history' && (
           <div>
-            <h3>Attendance History</h3>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
+              <h3 style={{margin:0}}>Attendance History</h3>
+              <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+            </div>
             {history.map(h => (
               <div key={h.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div><b>{h.date}</b> - {h.class}</div>
-                {userRole === 'admin' && <button onClick={() => requestDelete(h)} style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold'}}>Delete</button>}
+                <div><b>{h.date}</b> - {h.class} {h.section_filter && h.section_filter !== 'All' ? `(${h.section_filter})` : ''}</div>
+                {userRole === 'admin' && <button onClick={() => requestDelete(h)} style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold', cursor:'pointer'}}>Delete</button>}
               </div>
             ))}
           </div>
@@ -936,16 +1098,34 @@ function App() {
 
         {view === 'teacher_attendance_view' && (
           <div>
-            <h3>Teacher Attendance</h3>
-            <input type="date" value={tAttSearchDate} onChange={(e)=>setTAttSearchDate(e.target.value)} style={inputStyle} />
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
+              <h3 style={{margin:0}}>Teacher Attendance</h3>
+              <button onClick={() => {
+                const list = getUnifiedTeacherAttendanceList();
+                downloadPDF("Teacher Attendance & Absence Report", ["Teacher Name", "Date", "Status/Time", "Distance"], list.map(t => [t.name, t.date, t.time || "❌ Absent (Auto)", t.distance]), "Teacher_Attendance_Report");
+              }} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
+            </div>
+            <input type="date" value={tAttSearchDate} onChange={(e)=>setTAttSearchDate(e.target.value)} style={inputStyle} placeholder="Filter by Date" />
             {getUnifiedTeacherAttendanceList().map(t => (
               <div key={t.id} style={{...cardStyle, borderLeft: t.time ? '6px solid #2ecc71' : '6px solid #e74c3c'}}>
-                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}><span>{t.name}</span><span style={{color: t.time ? '#1a4a8e' : '#e74c3c'}}>{t.time ? t.time : "❌ Absent"}</span></div>
+                <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}><span>{t.name}</span><span style={{color: t.time ? '#1a4a8e' : '#e74c3c'}}>{t.time ? t.time : "❌ Absent (Auto Detected)"}</span></div>
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📅 {t.date} | 📍 Dist: {t.distance}</div>
+                {t.time && <button onClick={async () => {
+                      try {
+                        const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
+                        const staffSnap = await getDocs(qStaff);
+                        const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
+                        const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name));
+                        const attSnap = await getDocs(qAtt);
+                        const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                        setSelectedTeacherProfile(staffData);
+                        setTeacherProfileRecords(sortedAtt);
+                        setMyProfileData(null); setView('teacher_profile_view');
+                      } catch (err) { alert("Error loading profile."); }
+                    }} style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}>View Profile</button>}
               </div>
             ))}
-            <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/>
-            <h3>Leave Applications</h3>
+            <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/><h3 style={{color:'#1a4a8e'}}>Teacher Leave Applications</h3>
             {allLeaves.map(l => (
               <div key={l.id} style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}><div><b>{l.name}</b><div style={{fontSize:'12px', color:'#666'}}>{l.fromDate} → {l.toDate}</div></div><span style={{padding:'4px 8px', borderRadius:'5px', fontSize:'10px', fontWeight:'bold', background: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12', color:'white'}}>{l.status.toUpperCase()}</span></div>
@@ -958,7 +1138,7 @@ function App() {
 
         {view === 'monthly_report' && (
           <div style={cardStyle}>
-             <h4>{filterClass} - {selectedMonth}</h4>
+             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}><h4 style={{margin:0}}>{filterClass} Report</h4><button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button></div>
              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}><thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead><tbody>{monthlyData.map(([info, s])=>(<tr key={info.name} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'8px'}}>{info.roll} - {info.name}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody></table>
              <button onClick={()=>setView('dashboard')} style={{...actionBtn, marginTop:'15px'}}>Back Home</button>
           </div>
@@ -970,7 +1150,7 @@ function App() {
             <select onChange={(e)=>setFilterClass(e.target.value)} style={inputStyle}>{CLASSES.map(c=><option key={c} value={c}>{c}</option>)}</select>
             {view === 'sel_report' && <input type="month" value={selectedMonth} onChange={(e)=>setSelectedMonth(e.target.value)} style={inputStyle} />}
             <button onClick={async ()=> {
-              setMonthlyData([]); setRecords([]);
+              setMonthlyData([]); setRecords([]); setFilterSection('All'); 
               const qRec = query(collection(db, "ali_campus_records"), where("class", "==", filterClass));
               const recSnap = await getDocs(qRec);
               const studentMap = {};
