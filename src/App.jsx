@@ -9,6 +9,9 @@ const SECTIONS = ["A", "B", "C"];
 const ADMIN_PASSWORD = "ali786"; 
 const SCHOOL_COORDS = { lat: 32.1072678, lng: 71.8037100 }; 
 
+// Logo Configuration
+const schoolLogo = "https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png";
+
 const MOTIVATIONS = [
   "Teaching is the one profession that creates all other professions.",
   "Your influence as a teacher can never be erased.",
@@ -676,7 +679,22 @@ function App() {
           <span style={{ fontSize: '20px' }}>🔔</span>
           {notifications.length > 0 && <span style={{ position: 'absolute', top: '0', right: '0', background: 'red', color: 'white', fontSize: '9px', borderRadius: '50%', width: '15px', height: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{notifications.length}</span>}
         </div>
-        <h3 style={{margin:0}}>DAR-E-ARQAM (ALI CAMPUS)</h3>
+        
+        {/* Updated Header with Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <img 
+            src={schoolLogo} 
+            alt="School Logo" 
+            style={{ 
+              height: '40px', 
+              width: 'auto', 
+              objectFit: 'contain',
+              maxHeight: 'min(40px, 8vw)' 
+            }} 
+          />
+          <h3 style={{margin:0}}>DAR-E-ARQAM (ALI CAMPUS)</h3>
+        </div>
+
         {userRole === 'staff' && <div style={{background:'rgba(255,255,255,0.2)', padding:'5px', borderRadius:'8px', fontSize:'12px', marginTop:'5px'}}>Teacher: {staffName}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop:'15px', background:'#f0f2f5', padding:'10px', borderRadius:'15px' }}>
           <button onClick={() => setView('dashboard')} style={getNavStyle('dashboard')}>🏠 Home</button>
