@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc, writeBatch, onSnapshot } from "firebase/firestore"; 
+import { collection, addDoc, getDocs, serverTimestamp, query, orderBy, where, updateDoc, deleteDoc, doc, writeBatch, onSnapshot, setDoc, getDoc } from "firebase/firestore"; 
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -8,9 +8,6 @@ const CLASSES = ["Playgroup", "Nursery", "KG", "1st Class", "2nd Class", "3rd Cl
 const SECTIONS = ["A", "B", "C"]; 
 const ADMIN_PASSWORD = "ali786"; 
 const SCHOOL_COORDS = { lat: 32.1072678, lng: 71.8037100 }; 
-
-// Logo Configuration - Fixed Variable
-const schoolLogo = "https://dar-e-arqam.org.pk/wp-content/uploads/2021/04/Logo.png";
 
 const MOTIVATIONS = [
   "Teaching is the one profession that creates all other professions.",
@@ -23,6 +20,10 @@ const MOTIVATIONS = [
 ];
 
 function App() {
+  // Logo Logic Implementation
+  const [schoolLogo, setSchoolLogo] = useState("https://via.placeholder.com/150");
+  const [logoInput, setLogoInput] = useState("");
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState(''); 
   const [staffName, setStaffName] = useState(''); 
@@ -90,7 +91,6 @@ function App() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // New Extension States
   const [dailyQuote, setDailyQuote] = useState('');
   const [teacherSummary, setTeacherSummary] = useState({ todayClasses: 0, attendanceMarked: false, pendingLeaves: 0 });
   const [systemMessages, setSystemMessages] = useState([]);
@@ -103,11 +103,9 @@ function App() {
     pendingLeaves: 0
   });
 
-  // Notice states
   const [adminNoticeTitle, setAdminNoticeTitle] = useState('');
   const [adminNoticeMessage, setAdminNoticeMessage] = useState('');
 
-  // PASSWORD CHANGE STATES
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -116,7 +114,36 @@ function App() {
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
-  // Logic to sync System Notices from Firebase Firestore
+  // 🧩 FETCH LOGO FROM FIREBASE ON LOAD
+  useEffect(() => {
+    const fetchLogo = async () => {
+      try {
+        const docRef = doc(db, "settings", "school");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().logoUrl) {
+          setSchoolLogo(docSnap.data().logoUrl);
+          setLogoInput(docSnap.data().logoUrl);
+        }
+      } catch (error) {
+        console.error("Error fetching logo:", error);
+      }
+    };
+    fetchLogo();
+  }, []);
+
+  // 🧩 SAVE LOGO TO FIREBASE
+  const handleSaveLogo = async () => {
+    if (!logoInput) return alert("Please enter a valid URL");
+    try {
+      await setDoc(doc(db, "settings", "school"), { logoUrl: logoInput }, { merge: true });
+      setSchoolLogo(logoInput);
+      addNotification("School logo updated successfully", "success");
+      alert("Logo Updated!");
+    } catch (e) {
+      alert("Failed to save logo");
+    }
+  };
+
   useEffect(() => {
     if (isLoggedIn) {
       const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
@@ -132,7 +159,6 @@ function App() {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    // Persistent Motivational Line logic - FIX: Stable date-based rotation to prevent mismatches
     const dayOfMonth = new Date().getDate();
     const quoteIndex = dayOfMonth % MOTIVATIONS.length;
     setDailyQuote(MOTIVATIONS[quoteIndex]);
@@ -153,7 +179,7 @@ function App() {
     try {
       await addDoc(collection(db, "notices"), {
         title: adminNoticeTitle,
-        text: adminNoticeMessage, // mapping text for existing UI variable mapping
+        text: adminNoticeMessage, 
         createdAt: serverTimestamp(),
         createdBy: "admin"
       });
@@ -379,7 +405,6 @@ function App() {
           });
           alert("Attendance Marked!"); 
           setStatus('Done');
-          // FIX: Call fetchStats to sync DB states and clear reminders globally
           fetchStats();
           addNotification("Attendance marked successfully", "success");
         } else { 
@@ -444,13 +469,11 @@ function App() {
     }
 
     if (userRole === 'staff') {
-      // FIX: Dynamically fetch data and update notifications safely
       const studentAttSnap = await getDocs(query(collection(db, "daily_attendance"), where("date", "==", today)));
       const todayClasses = studentAttSnap.size;
       const myAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName), where("date", "==", today)));
       const myPendingLeaves = await getDocs(query(collection(db, "teacher_leaves"), where("name", "==", staffName), where("status", "==", "pending")));
       
-      // Load events data for mini-calendar fix
       const allMyAtt = await getDocs(query(collection(db, "teacher_attendance"), where("name", "==", staffName)));
       setMyAttendanceRecords(allMyAtt.docs.map(d => d.data()));
 
@@ -515,7 +538,6 @@ function App() {
     }
   };
 
-  // PASSWORD CHANGE HANDLER
   const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword || !confirmNewPassword) {
       return alert("All fields are required");
@@ -559,7 +581,6 @@ function App() {
     }
   };
 
-  // FIX: Populate empty calendar using dynamic attendance database events
   const MiniCalendar = ({ events = [] }) => {
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -594,7 +615,6 @@ function App() {
     );
   };
 
-  // FIX: Applied Logo Binding and Fallback for Login Screen
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <img 
@@ -695,7 +715,6 @@ function App() {
           {notifications.length > 0 && <span style={{ position: 'absolute', top: '0', right: '0', background: 'red', color: 'white', fontSize: '9px', borderRadius: '50%', width: '15px', height: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{notifications.length}</span>}
         </div>
         
-        {/* FIX: Updated Header with Logo Binding, Fallback, and Specific Styling */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
           <img 
             src={schoolLogo} 
@@ -735,7 +754,6 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         
-        {/* SECURITY / CHANGE PASSWORD VIEW */}
         {view === 'security' && (
           <div style={cardStyle}>
             <h3 style={{marginTop:0}}>Change Account Password</h3>
@@ -785,7 +803,6 @@ function App() {
           </div>
         )}
 
-        {/* TEACHER DASHBOARD EXTENSIONS */}
         {userRole === 'staff' && view === 'dashboard' && (
           <div>
             <div style={{ ...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12' }}>
@@ -866,6 +883,18 @@ function App() {
                 }} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer'}}>
                   <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small><b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
                 </div>
+              </div>
+              
+              {/* ADMIN LOGO CONTROL */}
+              <div style={{marginTop: '15px', padding: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '8px'}}>
+                <small style={{display: 'block', opacity: 0.8, marginBottom: '5px'}}>System Logo URL</small>
+                <input 
+                  placeholder="Enter Logo URL" 
+                  value={logoInput} 
+                  onChange={(e) => setLogoInput(e.target.value)} 
+                  style={{ ...inputStyle, padding: '8px', margin: '0 0 8px 0', fontSize: '12px' }} 
+                />
+                <button onClick={handleSaveLogo} style={{ ...actionBtn, padding: '8px', fontSize: '12px', background: '#f39c12' }}>Save Logo</button>
               </div>
             </div>
 
@@ -1117,14 +1146,12 @@ function App() {
             ))}
             <button onClick={async ()=>{
               try {
-                // FIX: Query strictly by Class and Date to guarantee 1 doc per class/day (prevent section-level duplicates)
                 const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("date", "==", today));
                 const checkSnap = await getDocs(qCheck);
                 
                 if (!checkSnap.empty) {
                   const existingDoc = checkSnap.docs[0];
                   const existingData = existingDoc.data().attendance_data || {};
-                  // Merge so we don't overwrite previous sections' data
                   const mergedAttendance = { ...existingData, ...attendance };
                   const attendancePayload = { class: filterClass, date: today, attendance_data: mergedAttendance, timestamp: serverTimestamp() };
                   
@@ -1141,8 +1168,6 @@ function App() {
                 setAttendance({}); 
                 setSearchQuery(''); 
                 setFilterSection('All');
-                
-                // FIX: Immediately fetch stats to clear pending task reminders in dashboard
                 fetchStats();
               } catch (e) { alert("Error saving attendance"); }
             }} style={actionBtn}>Submit Attendance</button>
@@ -1270,7 +1295,6 @@ function App() {
         )}
       </div>
 
-      {/* Footer Credit */}
       <footer style={{ fontSize: "12px", color: "#666", textAlign: "center", padding: "8px 0" }}>Developed by : Touqeer Iqbal Baghoor<br/>Contact: 923015800630</footer>
     </div>
   );
