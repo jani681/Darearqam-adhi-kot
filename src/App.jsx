@@ -111,7 +111,7 @@ function App() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
 
-  // --- NEW TICKER STATES ---
+  // --- SINGLE ACTIVE NOTICE SYSTEM STATES ---
   const [tickerText, setTickerText] = useState("");
   const [tickerActive, setTickerActive] = useState(false);
   const [adminTickerInput, setAdminTickerInput] = useState("");
@@ -119,7 +119,7 @@ function App() {
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
-  // 🧩 FETCH LOGO AND TICKER FROM FIREBASE ON LOAD
+  // 🧩 FETCH SETTINGS & NOTICE
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -130,7 +130,7 @@ function App() {
           setLogoInput(docSnap.data().logoUrl);
         }
 
-        // Fetch Ticker
+        // Fetch Single Notice
         const tickerRef = doc(db, "settings", "notice");
         const tickerSnap = await getDoc(tickerRef);
         if (tickerSnap.exists()) {
@@ -145,7 +145,7 @@ function App() {
     };
     fetchSettings();
 
-    // Real-time listener for Ticker (so it updates immediately for teachers)
+    // Real-time listener for Single Notice
     const unsubTicker = onSnapshot(doc(db, "settings", "notice"), (doc) => {
       if (doc.exists()) {
         setTickerText(doc.data().text || "");
@@ -156,26 +156,36 @@ function App() {
     return () => unsubTicker();
   }, []);
 
-  // 🧩 TICKER ADMIN FUNCTIONS
-  const handleUpdateTicker = async (statusUpdate = null) => {
+  // 🧩 NOTICE SYSTEM ADMIN FUNCTIONS
+  const handleUpdateNotice = async (statusOverride = null) => {
     try {
-      const newStatus = statusUpdate !== null ? statusUpdate : tickerActive;
+      const finalActive = statusOverride !== null ? statusOverride : tickerActive;
       await setDoc(doc(db, "settings", "notice"), {
         text: adminTickerInput,
-        active: newStatus
-      }, { merge: true });
-      setTickerActive(newStatus);
+        active: finalActive
+      });
+      setTickerActive(finalActive);
       setTickerText(adminTickerInput);
-      addNotification("Scrolling notice updated", "success");
+      addNotification("Active notice updated", "success");
       alert("Notice Updated!");
     } catch (e) {
-      alert("Failed to update ticker");
+      alert("Failed to update notice");
     }
   };
 
-  const handleClearTicker = async () => {
+  const handleClearNotice = async () => {
     setAdminTickerInput("");
-    await handleUpdateTicker(false);
+    try {
+      await setDoc(doc(db, "settings", "notice"), {
+        text: "",
+        active: false
+      });
+      setTickerText("");
+      setTickerActive(false);
+      alert("Notice Cleared!");
+    } catch (e) {
+      alert("Failed to clear notice");
+    }
   };
 
   // 🧩 SAVE LOGO TO FIREBASE
@@ -667,10 +677,10 @@ function App() {
     overflow: 'hidden',
     whiteSpace: 'nowrap',
     position: 'relative',
-    background: '#fff9c4', // Soft yellow
-    padding: '8px 0',
+    background: '#fff9c4', 
+    padding: '10px 0',
     marginBottom: '10px',
-    borderRadius: '8px',
+    borderRadius: '10px',
     border: '1px solid #ffe082',
     display: 'flex',
     alignItems: 'center'
@@ -679,8 +689,8 @@ function App() {
   const tickerTextStyle = {
     display: 'inline-block',
     paddingLeft: '100%',
-    animation: 'scrollText 15s linear infinite',
-    color: '#333',
+    animation: 'scrollText 20s linear infinite',
+    color: '#d35400',
     fontWeight: 'bold',
     fontSize: '14px'
   };
@@ -832,10 +842,10 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         
-        {/* --- TEACHER DASHBOARD TICKER DISPLAY --- */}
+        {/* --- SINGLE ACTIVE NOTICE TICKER (TEACHER VIEW) --- */}
         {userRole === 'staff' && view === 'dashboard' && tickerActive && tickerText !== "" && (
           <div style={tickerContainerStyle}>
-            <span style={{position:'absolute', left:0, background:'#fff9c4', padding:'0 10px', zIndex:5, fontWeight:'bold', display:'flex', alignItems:'center'}}>🔔 Notice:</span>
+            <span style={{position:'absolute', left:0, background:'#fff9c4', padding:'0 10px', zIndex:5, fontWeight:'bold', fontSize:'12px', color:'#1a4a8e', borderRight:'2px solid #ffe082'}}>📢 NOTICE</span>
             <div style={tickerTextStyle}>
               {tickerText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {tickerText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {tickerText}
             </div>
@@ -986,20 +996,23 @@ function App() {
               </div>
             </div>
 
-            {/* --- ADMIN TICKER CONTROL PANEL --- */}
-            <div style={{...cardStyle, borderLeft:'6px solid #ffe082'}}>
-              <h4 style={{marginTop:0}}>🔔 Scrolling Ticker Control</h4>
+            {/* --- SINGLE ACTIVE NOTICE SYSTEM (ADMIN CONTROL) --- */}
+            <div style={{...cardStyle, borderLeft: '6px solid #ffe082'}}>
+              <h4 style={{marginTop:0}}>🔔 Single Active Notice System</h4>
               <textarea 
-                placeholder="Enter scrolling message (max 200 chars)..." 
+                placeholder="Enter notice text (max 200 characters)..." 
                 maxLength="200"
                 value={adminTickerInput} 
                 onChange={(e)=>setAdminTickerInput(e.target.value)} 
-                style={{...inputStyle, height: '60px'}} 
+                style={{...inputStyle, height:'70px', background:'#fff9c4', color:'#1a4a8e', fontWeight:'bold'}} 
               />
-              <div style={{display:'flex', gap:'8px'}}>
-                <button onClick={() => handleUpdateTicker(true)} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#2ecc71'}}>Save & Turn ON</button>
-                <button onClick={() => handleUpdateTicker(false)} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#e67e22'}}>{tickerActive ? 'Turn OFF' : 'Is OFF'}</button>
-                <button onClick={handleClearTicker} style={{...actionBtn, padding:'10px', fontSize:'12px', background:'#7f8c8d'}}>Clear</button>
+              <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+                <button onClick={() => handleUpdateNotice(true)} style={{...actionBtn, flex:1, padding:'10px', fontSize:'12px', background:'#2ecc71'}}>Save & Active</button>
+                <button onClick={() => handleUpdateNotice(!tickerActive)} style={{...actionBtn, flex:1, padding:'10px', fontSize:'12px', background:'#e67e22'}}>{tickerActive ? "Deactivate" : "Activate"}</button>
+                <button onClick={handleClearNotice} style={{...actionBtn, flex:1, padding:'10px', fontSize:'12px', background:'#7f8c8d'}}>Clear Notice</button>
+              </div>
+              <div style={{marginTop:'10px', fontSize:'11px', color:'#666'}}>
+                Status: <b>{tickerActive ? "🟢 ACTIVE" : "🔴 INACTIVE"}</b> | Character Count: {adminTickerInput.length}/200
               </div>
             </div>
 
@@ -1106,7 +1119,7 @@ function App() {
             <h3>My Leave Requests</h3>
             {myLeaves.length === 0 && <p style={{textAlign:'center', color:'#999'}}>No leaves applied yet.</p>}
             {myLeaves.map(l => (
-              <div key={l.id} style={cardStyle}>
+              <div key={l.id} style={l.status === 'approved' ? {...cardStyle, borderLeft:'6px solid #2ecc71'} : l.status === 'rejected' ? {...cardStyle, borderLeft:'6px solid #e74c3c'} : cardStyle}>
                 <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}>
                   <span>{l.fromDate} → {l.toDate}</span>
                   <span style={{color: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12'}}>{l.status.toUpperCase()}</span>
