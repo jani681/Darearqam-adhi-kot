@@ -126,6 +126,13 @@ function App() {
   const [myDayNotes, setMyDayNotes] = useState('');
   const [myDayReminders, setMyDayReminders] = useState('');
 
+  // TASBEEH STATES
+  const [isTasbeehOpen, setIsTasbeehOpen] = useState(false);
+  const [tasbeehCount, setTasbeehCount] = useState(parseInt(localStorage.getItem('tasbeehCount')) || 0);
+  const [tasbeehTarget, setTasbeehTarget] = useState(parseInt(localStorage.getItem('tasbeehTarget')) || 33);
+  const [tasbeehType, setTasbeehType] = useState(localStorage.getItem('tasbeehType') || 'SubhanAllah');
+  const [customTasbeeh, setCustomTasbeeh] = useState(localStorage.getItem('customTasbeeh') || '');
+
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
@@ -133,6 +140,18 @@ function App() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // PERSIST TASBEEH
+  useEffect(() => {
+    localStorage.setItem('tasbeehCount', tasbeehCount);
+    localStorage.setItem('tasbeehTarget', tasbeehTarget);
+    localStorage.setItem('tasbeehType', tasbeehType);
+    localStorage.setItem('customTasbeeh', customTasbeeh);
+    
+    if (tasbeehCount > 0 && tasbeehCount === tasbeehTarget) {
+      if ('vibrate' in navigator) navigator.vibrate(200);
+    }
+  }, [tasbeehCount, tasbeehTarget, tasbeehType, customTasbeeh]);
 
   const handleSaveTiming = () => {
     localStorage.setItem('schoolStartTime', schoolStartTime);
@@ -487,12 +506,10 @@ function App() {
     addNotification(`Generated PDF: ${fileName}`, 'info');
   };
 
-  // --- NEW FEATURE: Generate Fee Slip ---
   const generateFeeSlip = (student) => {
     const doc = new jsPDF();
     const margin = 20;
     
-    // Header Box
     doc.setDrawColor(26, 74, 142);
     doc.setLineWidth(1);
     doc.rect(10, 10, 190, 50);
@@ -508,7 +525,6 @@ function App() {
     doc.setFontSize(10);
     doc.text(`Date: ${new Date().toLocaleDateString()}`, 105, 45, { align: 'center' });
 
-    // Details Grid
     const details = [
       ["Student Name:", student.student_name.toUpperCase()],
       ["Roll Number:", student.roll_number],
@@ -528,7 +544,6 @@ function App() {
       columnStyles: { 0: { fontStyle: 'bold', width: 60 } }
     });
 
-    // Footer
     const finalY = doc.lastAutoTable.finalY + 30;
     doc.line(20, finalY, 80, finalY);
     doc.text("Principal Signature", 30, finalY + 5);
@@ -894,6 +909,83 @@ function App() {
         </div>
       )}
 
+      {isTasbeehOpen && (
+        <div 
+          onClick={() => setIsTasbeehOpen(false)}
+          style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(26,74,142,0.9)', zIndex:4000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}
+        >
+          <div 
+            onClick={(e) => { e.stopPropagation(); setTasbeehCount(prev => prev + 1); }}
+            style={{ background:'white', width:'100%', maxWidth:'400px', borderRadius:'25px', padding:'30px', boxShadow: '0 15px 40px rgba(0,0,0,0.4)', textAlign:'center', cursor: 'pointer', userSelect:'none' }}
+          >
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
+               <h3 style={{ margin:0, color: '#1a4a8e' }}>📿 Tasbeeh Counter</h3>
+               <button onClick={(e) => { e.stopPropagation(); setIsTasbeehOpen(false); }} style={{ background:'none', border:'none', fontSize:'24px', color:'#999', cursor:'pointer' }}>×</button>
+            </div>
+
+            <div style={{ marginBottom:'15px' }} onClick={(e) => e.stopPropagation()}>
+               <select 
+                 value={tasbeehType} 
+                 onChange={(e) => setTasbeehType(e.target.value)} 
+                 style={{ ...inputStyle, textAlign:'center', fontWeight:'bold', fontSize:'18px', border:'2px solid #1a4a8e', color:'#1a4a8e' }}
+               >
+                 <option value="SubhanAllah">SubhanAllah</option>
+                 <option value="Alhamdulillah">Alhamdulillah</option>
+                 <option value="Allahu Akbar">Allahu Akbar</option>
+                 <option value="Custom">Custom Phrase</option>
+               </select>
+               {tasbeehType === 'Custom' && (
+                 <input 
+                   type="text" 
+                   placeholder="Enter Zikr..." 
+                   value={customTasbeeh} 
+                   onChange={(e) => setCustomTasbeeh(e.target.value)} 
+                   style={{ ...inputStyle, marginTop:'10px', textAlign:'center' }}
+                 />
+               )}
+            </div>
+
+            <div style={{ fontSize:'64px', fontWeight:'900', color:'#1a4a8e', margin:'20px 0' }}>
+               {tasbeehCount}
+            </div>
+
+            <div style={{ marginBottom:'25px' }} onClick={(e) => e.stopPropagation()}>
+               <div style={{ fontSize:'12px', color:'#666', marginBottom:'5px' }}>Progress: {tasbeehCount} / {tasbeehTarget}</div>
+               <div style={{ height:'10px', background:'#eee', borderRadius:'10px', overflow:'hidden' }}>
+                  <div style={{ width: `${Math.min((tasbeehCount/tasbeehTarget)*100, 100)}%`, height:'100%', background: tasbeehCount >= tasbeehTarget ? '#2ecc71' : '#f39c12', transition:'width 0.3s ease' }}></div>
+               </div>
+               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', marginTop:'15px' }}>
+                  <span style={{ fontSize:'14px' }}>Target:</span>
+                  <input 
+                    type="number" 
+                    value={tasbeehTarget} 
+                    onChange={(e) => setTasbeehTarget(parseInt(e.target.value) || 0)} 
+                    style={{ width:'80px', padding:'5px', textAlign:'center', borderRadius:'5px', border:'1px solid #ddd' }}
+                  />
+               </div>
+            </div>
+
+            <div style={{ display:'flex', gap:'10px' }} onClick={(e) => e.stopPropagation()}>
+               <button 
+                 onClick={() => setTasbeehCount(0)} 
+                 style={{ flex:1, padding:'12px', background:'#e74c3c', color:'white', border:'none', borderRadius:'12px', fontWeight:'bold' }}
+               >
+                 🔄 Reset
+               </button>
+               <button 
+                 onClick={() => setIsTasbeehOpen(false)} 
+                 style={{ flex:1, padding:'12px', background:'#1a4a8e', color:'white', border:'none', borderRadius:'12px', fontWeight:'bold' }}
+               >
+                 Close
+               </button>
+            </div>
+            
+            <p style={{ marginTop:'20px', fontSize:'12px', color:'#999' }}>Tap anywhere on the card to count +1</p>
+            {tasbeehCount >= tasbeehTarget && <div style={{ marginTop:'10px', color:'#2ecc71', fontWeight:'bold', animation:'bounce 0.5s infinite' }}>🎉 Target Reached!</div>}
+          </div>
+        </div>
+      )}
+
       {showPreview && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.7)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', boxSizing:'border-box' }}>
           <div style={{ background:'white', width:'100%', maxWidth:'600px', borderRadius:'15px', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
@@ -983,6 +1075,7 @@ function App() {
             setView('teacher_attendance_view'); 
           }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
           {userRole === 'staff' && <button onClick={() => setIsMyDayModalOpen(true)} style={getNavStyle('myday')}>📅 My Day</button>}
+          <button onClick={() => setIsTasbeehOpen(true)} style={getNavStyle('tasbeeh')}>📿 Tasbeeh</button>
           <button onClick={() => setView('security')} style={getNavStyle('security')}>🔒 Security</button>
           <button onClick={() => { setIsLoggedIn(false); setNotifications([]); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
