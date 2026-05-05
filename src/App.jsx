@@ -119,6 +119,9 @@ function App() {
   const [schoolEndTime, setSchoolEndTime] = useState(localStorage.getItem('schoolEndTime') || "14:00");
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  // Task Specific State
+  const [isMyDayModalOpen, setIsMyDayModalOpen] = useState(false);
+
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
@@ -816,6 +819,45 @@ function App() {
         </div>
       )}
 
+      {isMyDayModalOpen && (
+        <div 
+          onClick={() => setIsMyDayModalOpen(false)}
+          style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.7)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{ background:'white', width:'100%', maxWidth:'450px', borderRadius:'15px', padding:'20px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', maxHeight: '80vh', overflowY: 'auto' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0, color: '#1a4a8e' }}>📅 My Day</h3>
+              <button onClick={() => setIsMyDayModalOpen(false)} style={{ background: '#eee', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+            </div>
+            
+            <div style={{ marginBottom: '15px' }}>
+              <h4 style={{ color: '#f39c12', marginBottom: '5px' }}>Daily Focus</h4>
+              <div style={{ height: '40px', background: '#f9f9f9', borderRadius: '8px', border: '1px dashed #ccc' }}></div>
+            </div>
+
+            <div style={{ marginBottom: '15px' }}>
+              <h4 style={{ color: '#1a4a8e', marginBottom: '5px' }}>Teacher Plan</h4>
+              <div style={{ height: '60px', background: '#f9f9f9', borderRadius: '8px', border: '1px dashed #ccc' }}></div>
+            </div>
+
+            <div style={{ marginBottom: '15px' }}>
+              <h4 style={{ color: '#666', marginBottom: '5px' }}>Notes</h4>
+              <div style={{ height: '80px', background: '#f9f9f9', borderRadius: '8px', border: '1px dashed #ccc' }}></div>
+            </div>
+
+            <div style={{ marginBottom: '10px' }}>
+              <h4 style={{ color: '#e74c3c', marginBottom: '5px' }}>Reminders</h4>
+              <div style={{ height: '40px', background: '#f9f9f9', borderRadius: '8px', border: '1px dashed #ccc' }}></div>
+            </div>
+
+            <button onClick={() => setIsMyDayModalOpen(false)} style={{ ...actionBtn, marginTop: '10px' }}>Close Window</button>
+          </div>
+        </div>
+      )}
+
       {showPreview && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.7)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', boxSizing:'border-box' }}>
           <div style={{ background:'white', width:'100%', maxWidth:'600px', borderRadius:'15px', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
@@ -904,6 +946,7 @@ function App() {
             setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
             setView('teacher_attendance_view'); 
           }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
+          {userRole === 'staff' && <button onClick={() => setIsMyDayModalOpen(true)} style={getNavStyle('myday')}>📅 My Day</button>}
           <button onClick={() => setView('security')} style={getNavStyle('security')}>🔒 Security</button>
           <button onClick={() => { setIsLoggedIn(false); setNotifications([]); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
