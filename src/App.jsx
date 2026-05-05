@@ -480,6 +480,59 @@ function App() {
     addNotification(`Generated PDF: ${fileName}`, 'info');
   };
 
+  // --- NEW FEATURE: Generate Fee Slip ---
+  const generateFeeSlip = (student) => {
+    const doc = new jsPDF();
+    const margin = 20;
+    
+    // Header Box
+    doc.setDrawColor(26, 74, 142);
+    doc.setLineWidth(1);
+    doc.rect(10, 10, 190, 50);
+    
+    doc.setFontSize(22);
+    doc.setTextColor(26, 74, 142);
+    doc.text("DAR-E-ARQAM (ALI CAMPUS)", 105, 25, { align: 'center' });
+    
+    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.text("STUDENT FEE SLIP", 105, 35, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 105, 45, { align: 'center' });
+
+    // Details Grid
+    const details = [
+      ["Student Name:", student.student_name.toUpperCase()],
+      ["Roll Number:", student.roll_number],
+      ["Class:", `${student.class} ${student.section ? '- ' + student.section : ''}`],
+      ["Billing Month:", new Date().toLocaleString('default', { month: 'long', year: 'numeric' })],
+      ["Status:", student.arrears > 0 ? "Pending" : "Paid"],
+      ["Monthly Fee:", `Rs. ${student.base_fee}`],
+      ["Previous Arrears:", `Rs. ${student.arrears || 0}`],
+      ["Total Payable:", `Rs. ${Number(student.base_fee) + Number(student.arrears || 0)}`]
+    ];
+
+    doc.autoTable({
+      startY: 70,
+      body: details,
+      theme: 'plain',
+      styles: { fontSize: 12, cellPadding: 5 },
+      columnStyles: { 0: { fontStyle: 'bold', width: 60 } }
+    });
+
+    // Footer
+    const finalY = doc.lastAutoTable.finalY + 30;
+    doc.line(20, finalY, 80, finalY);
+    doc.text("Principal Signature", 30, finalY + 5);
+    
+    doc.line(130, finalY, 190, finalY);
+    doc.text("Parent Signature", 145, finalY + 5);
+
+    doc.save(`FeeSlip_${student.roll_number}_${student.student_name}.pdf`);
+    addNotification(`Fee slip generated for ${student.student_name}`, 'success');
+  };
+
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371e3; 
     const dLat = (lat2-lat1) * Math.PI/180;
@@ -768,7 +821,7 @@ function App() {
           <div style={{ background:'white', width:'100%', maxWidth:'600px', borderRadius:'15px', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
             <div style={{ background:'#1a4a8e', color:'white', padding:'15px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <h3 style={{margin:0, fontSize:'16px'}}>📊 CSV Data Preview</h3>
-              <button onClick={() => setShowPreview(false)} style={{ background:'none', border:'none', color:'white', fontSize:'20px', cursor:'pointer' }}>×</button>
+              <button onClick={() => {setShowPreview(false); setPreviewData([]);}} style={{ background:'none', border:'none', color:'white', fontSize:'20px', cursor:'pointer' }}>×</button>
             </div>
             <div style={{ padding:'15px', overflowX:'auto', flex:1 }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
@@ -1272,12 +1325,65 @@ function App() {
                 </div>
             </div>
             {getFilteredRecords().map(r => (
-              <div key={r.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><span><b>{r.student_name}</b> ({r.roll_number})</span><a href={`https://wa.me/${r.parent_whatsapp}`} target="_blank" rel="noreferrer" style={{textDecoration:'none', color:'#25D366', fontWeight:'bold'}}><span style={{fontSize:'16px'}}>🟢</span> WhatsApp</a></div>
-                <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>{r.class} {r.section ? `- Section ${r.section}` : ''} | Fee: {r.base_fee} | Baqaya: {r.arrears || 0}</div>
-                <div style={{marginTop:'10px'}}>
-                  <button onClick={()=>{setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp); setBaseFee(r.base_fee); setArrears(r.arrears); setSelectedSection(r.section || ''); setView('add');}} style={{background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', marginRight:'10px'}}>Edit</button>
-                  <button onClick={async ()=>{if(window.confirm("Delete?")){await deleteDoc(doc(db,"ali_campus_records",r.id)); addNotification(`Deleted student: ${r.student_name}`, "warning"); setView('dashboard');}}} style={{background:'#e74c3c', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px'}}>Delete</button>
+              <div key={r.id} style={{ ...cardStyle, borderLeft: '6px solid #1a4a8e', transition: 'all 0.2s ease' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1a4a8e' }}>{r.student_name}</div>
+                    <div style={{ fontSize: '13px', color: '#555', marginTop: '2px' }}>Roll: <span style={{ fontWeight: '600' }}>{r.roll_number}</span></div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      onClick={() => generateFeeSlip(r)} 
+                      style={{ background: '#2ecc71', border: 'none', borderRadius: '8px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Generate Fee Slip"
+                    >
+                      📄
+                    </button>
+                    {r.parent_whatsapp && (
+                      <a 
+                        href={`https://wa.me/${r.parent_whatsapp}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        style={{ background: '#25D366', borderRadius: '8px', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
+                      >
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WA" style={{ width: '18px', height: '18px' }} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ background: '#f8f9fa', padding: '10px', borderRadius: '10px', marginBottom: '12px', fontSize: '12px', color: '#444' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>{r.class} {r.section ? `(Sec ${r.section})` : '(Gen)'}</span>
+                    <span style={{ 
+                      fontWeight: 'bold', 
+                      color: r.arrears > 0 ? '#e74c3c' : '#2ecc71',
+                      background: r.arrears > 0 ? '#fdeaea' : '#eafaf1',
+                      padding: '2px 8px',
+                      borderRadius: '12px'
+                    }}>
+                      {r.arrears > 0 ? 'Overdue' : 'Paid'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '15px' }}>
+                    <span>Fee: <b>{r.base_fee}</b></span>
+                    <span>Pending: <b>{r.arrears || 0}</b></span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    onClick={()=>{setEditingStudent(r); setName(r.student_name); setRollNo(r.roll_number); setWhatsapp(r.parent_whatsapp); setBaseFee(r.base_fee); setArrears(r.arrears); setSelectedSection(r.section || ''); setView('add');}} 
+                    style={{ flex: 1, background: '#f39c12', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button 
+                    onClick={async ()=>{if(window.confirm(`Are you sure you want to delete ${r.student_name}?`)){await deleteDoc(doc(db,"ali_campus_records",r.id)); addNotification(`Deleted student: ${r.student_name}`, "warning"); fetchStats();}}} 
+                    style={{ flex: 1, background: '#e74c3c', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                  >
+                    🗑️ Delete
+                  </button>
                 </div>
               </div>
             ))}
