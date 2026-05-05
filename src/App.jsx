@@ -111,15 +111,53 @@ function App() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
 
-  // --- SINGLE ACTIVE NOTICE SYSTEM STATES ---
   const [tickerText, setTickerText] = useState("");
   const [tickerActive, setTickerActive] = useState(false);
   const [adminTickerInput, setAdminTickerInput] = useState("");
 
+  const [schoolStartTime, setSchoolStartTime] = useState(localStorage.getItem('schoolStartTime') || "08:00");
+  const [schoolEndTime, setSchoolEndTime] = useState(localStorage.getItem('schoolEndTime') || "14:00");
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
-  // 🧩 FETCH SETTINGS & NOTICE
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleSaveTiming = () => {
+    localStorage.setItem('schoolStartTime', schoolStartTime);
+    localStorage.setItem('schoolEndTime', schoolEndTime);
+    addNotification("School timing updated in local storage", "success");
+    alert("Timing Saved Locally!");
+  };
+
+  const getSchoolStatus = () => {
+    const now = new Date();
+    const [startH, startM] = schoolStartTime.split(':');
+    const [endH, endM] = schoolEndTime.split(':');
+    const start = new Date().setHours(startH, startM, 0);
+    const end = new Date().setHours(endH, endM, 0);
+    
+    if (now < start) return { status: "Closed (Starts Soon)", color: "#f39c12" };
+    if (now > end) return { status: "Closed (Finished)", color: "#e74c3c" };
+    return { status: "School is Open", color: "#2ecc71" };
+  };
+
+  const getCountdown = () => {
+    const now = new Date();
+    const [endH, endM] = schoolEndTime.split(':');
+    const end = new Date().setHours(endH, endM, 0);
+    const diff = end - now;
+    if (diff <= 0) return "00:00:00";
+    const hours = Math.floor(diff / 3600000).toString().padStart(2, '0');
+    const minutes = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+    const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  };
+
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -130,7 +168,6 @@ function App() {
           setLogoInput(docSnap.data().logoUrl);
         }
 
-        // Fetch Single Notice
         const tickerRef = doc(db, "settings", "notice");
         const tickerSnap = await getDoc(tickerRef);
         if (tickerSnap.exists()) {
@@ -145,7 +182,6 @@ function App() {
     };
     fetchSettings();
 
-    // Real-time listener for Single Notice
     const unsubTicker = onSnapshot(doc(db, "settings", "notice"), (doc) => {
       if (doc.exists()) {
         setTickerText(doc.data().text || "");
@@ -156,7 +192,6 @@ function App() {
     return () => unsubTicker();
   }, []);
 
-  // 🧩 NOTICE SYSTEM ADMIN FUNCTIONS
   const handleUpdateNotice = async (statusOverride = null) => {
     try {
       const finalActive = statusOverride !== null ? statusOverride : tickerActive;
@@ -188,7 +223,6 @@ function App() {
     }
   };
 
-  // 🧩 SAVE LOGO TO FIREBASE
   const handleSaveLogo = async () => {
     if (!logoInput) return alert("Please enter a valid URL");
     try {
@@ -248,7 +282,6 @@ function App() {
     }
   };
 
-  // CLEAR ALL NOTICES FEATURE
   const handleClearAllNotices = async () => {
     if (!window.confirm("Are you sure you want to delete ALL broadcast notices? This action cannot be undone.")) return;
     try {
@@ -656,41 +689,6 @@ function App() {
     }
   };
 
-  const MiniCalendar = ({ events = [] }) => {
-    const now = new Date();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const currentDay = now.getDate();
-    const currentMonthStr = now.toISOString().slice(0, 7);
-    
-    const attendedDays = events
-      .filter(r => r.date && r.date.startsWith(currentMonthStr))
-      .map(r => parseInt(r.date.split('-')[2], 10));
-
-    return (
-      <div style={{ background: '#fff', borderRadius: '15px', padding: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
-        <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', color: '#1a4a8e', textAlign: 'center' }}>
-          {now.toLocaleString('default', { month: 'long' })} {now.getFullYear()}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
-          {[...Array(daysInMonth)].map((_, i) => {
-            const day = i + 1;
-            const isToday = day === currentDay;
-            const isAttended = attendedDays.includes(day);
-            return (
-            <div key={i} style={{ 
-              fontSize: '10px', padding: '4px', textAlign: 'center', borderRadius: '4px',
-              backgroundColor: isToday ? '#f39c12' : (isAttended ? '#2ecc71' : '#f0f2f5'),
-              color: isToday || isAttended ? '#fff' : '#333'
-            }}>
-              {day}
-            </div>
-          )})}
-        </div>
-      </div>
-    );
-  };
-
-  // --- STYLES FOR TICKER ---
   const tickerContainerStyle = {
     overflow: 'hidden',
     whiteSpace: 'nowrap',
@@ -860,7 +858,6 @@ function App() {
 
       <div style={{ padding: '15px', maxWidth: '500px', margin: '0 auto', flex: 1, width: '100%', boxSizing: 'border-box' }}>
         
-        {/* --- SINGLE ACTIVE NOTICE TICKER (TEACHER VIEW) --- */}
         {userRole === 'staff' && view === 'dashboard' && tickerActive && tickerText !== "" && (
           <div style={tickerContainerStyle}>
             <span style={{position:'absolute', left:0, background:'#fff9c4', padding:'0 10px', zIndex:5, fontWeight:'bold', fontSize:'12px', color:'#1a4a8e', borderRight:'2px solid #ffe082'}}>📢 NOTICE</span>
@@ -923,17 +920,24 @@ function App() {
           <div>
             <div style={{ ...cardStyle, background: '#1a4a8e', color: 'white', borderLeft: '6px solid #f39c12' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 style={{ margin: 0 }}>📅 Today Summary</h4>
-                <small style={{ opacity: 0.8 }}>{today}</small>
+                <h4 style={{ margin: 0 }}>⏰ School Time Widget</h4>
+                <small style={{ opacity: 0.8 }}>{currentTime.toLocaleDateString()}</small>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
-                <div style={{ background: 'rgba(255,255,255,0.1)', padding: '8px', borderRadius: '8px' }}>
-                  <small style={{ fontSize: '10px', display: 'block' }}>Today's Classes</small>
-                  <b>{teacherSummary.todayClasses}</b>
+              <div style={{ textAlign: 'center', margin: '15px 0' }}>
+                <div style={{ fontSize: '32px', fontWeight: 'bold' }}>{currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</div>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: getSchoolStatus().color }}></span>
+                  <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{getSchoolStatus().status}</span>
                 </div>
-                <div style={{ background: 'rgba(255,255,255,0.1)', padding: '8px', borderRadius: '8px' }}>
-                  <small style={{ fontSize: '10px', display: 'block' }}>Attendance</small>
-                  <b>{teacherSummary.attendanceMarked ? "✅ Marked" : "❌ Pending"}</b>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                  <small style={{ fontSize: '10px', display: 'block', opacity: 0.8 }}>Time Left to Closing</small>
+                  <b style={{ fontSize: '16px' }}>{getCountdown()}</b>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                  <small style={{ fontSize: '10px', display: 'block', opacity: 0.8 }}>Today's Classes</small>
+                  <b style={{ fontSize: '16px' }}>{teacherSummary.todayClasses}</b>
                 </div>
               </div>
             </div>
@@ -949,7 +953,6 @@ function App() {
               "{dailyQuote}"
             </div>
 
-            {/* BROADCAST NOTICES SECTION (TEACHER VIEW) */}
             {systemMessages.length > 0 && (
               <div style={{ ...cardStyle, borderLeft: '6px solid #3498db' }}>
                 <h4 style={{ marginTop: 0, fontSize: '14px' }}>📢 System Notices</h4>
@@ -960,10 +963,6 @@ function App() {
                 ))}
               </div>
             )}
-
-            <div style={{ marginBottom: '15px' }}>
-              <MiniCalendar events={myAttendanceRecords} />
-            </div>
 
             <div style={{ ...cardStyle, borderLeft: '6px solid #1a4a8e' }}>
               <h4 style={{ marginTop: 0, fontSize: '14px' }}>🚀 Quick Class Switch</h4>
@@ -987,20 +986,8 @@ function App() {
                 <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Total Staff</small><b style={{fontSize: '18px'}}>{adminAnalytics.totalStaff}</b></div>
                 <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Today Stud. Present</small><b style={{fontSize: '18px'}}>{adminAnalytics.todayStudentAttendance}</b></div>
                 <div style={{background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px'}}><small style={{display: 'block', opacity: 0.8}}>Today Teach. Present</small><b style={{fontSize: '18px'}}>{adminAnalytics.todayTeacherAttendance}</b></div>
-                <div onClick={async () => {
-                   const sRec = await getDocs(collection(db, "staff_records"));
-                   setStaffRecords(sRec.docs.map(d => ({id: d.id, ...d.data()})));
-                   const t = await getDocs(query(collection(db, "teacher_attendance"), orderBy("timestamp","desc"))); 
-                   setTeacherAttendanceList(t.docs.map(d=>({id:d.id, ...d.data()}))); 
-                   const l = await getDocs(query(collection(db, "teacher_leaves"), orderBy("appliedAt", "desc")));
-                   setAllLeaves(l.docs.map(d=>({id:d.id, ...d.data()})));
-                   setView('teacher_attendance_view');
-                }} style={{background: adminAnalytics.pendingLeaves > 0 ? '#e74c3c' : 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px', gridColumn: 'span 2', cursor: 'pointer'}}>
-                  <small style={{display: 'block', opacity: 0.8}}>Pending Teacher Leaves</small><b style={{fontSize: '18px'}}>{adminAnalytics.pendingLeaves} Request(s)</b>
-                </div>
               </div>
               
-              {/* ADMIN LOGO CONTROL */}
               <div style={{marginTop: '15px', padding: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '8px'}}>
                 <small style={{display: 'block', opacity: 0.8, marginBottom: '5px'}}>System Logo URL</small>
                 <input 
@@ -1013,7 +1000,21 @@ function App() {
               </div>
             </div>
 
-            {/* --- SINGLE ACTIVE NOTICE SYSTEM (ADMIN CONTROL) --- */}
+            <div style={{...cardStyle, borderLeft: '6px solid #2ecc71'}}>
+              <h4 style={{marginTop:0}}>⚙️ School Timing Control</h4>
+              <div style={{display: 'flex', gap: '10px'}}>
+                <div style={{flex: 1}}>
+                  <label style={{fontSize: '10px', fontWeight: 'bold'}}>Start Time</label>
+                  <input type="time" value={schoolStartTime} onChange={(e) => setSchoolStartTime(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{flex: 1}}>
+                  <label style={{fontSize: '10px', fontWeight: 'bold'}}>End Time</label>
+                  <input type="time" value={schoolEndTime} onChange={(e) => setSchoolEndTime(e.target.value)} style={inputStyle} />
+                </div>
+              </div>
+              <button onClick={handleSaveTiming} style={{...actionBtn, padding: '10px', background: '#2ecc71', fontSize: '12px', marginTop: '5px'}}>Save Timing to localStorage</button>
+            </div>
+
             <div style={{...cardStyle, borderLeft: '6px solid #ffe082'}}>
               <h4 style={{marginTop:0}}>🔔 Single Active Notice System</h4>
               <textarea 
@@ -1028,12 +1029,8 @@ function App() {
                 <button onClick={() => handleUpdateNotice(!tickerActive)} style={{...actionBtn, flex:1, padding:'10px', fontSize:'12px', background:'#e67e22'}}>{tickerActive ? "Deactivate" : "Activate"}</button>
                 <button onClick={handleClearNotice} style={{...actionBtn, flex:1, padding:'10px', fontSize:'12px', background:'#7f8c8d'}}>Clear Notice</button>
               </div>
-              <div style={{marginTop:'10px', fontSize:'11px', color:'#666'}}>
-                Status: <b>{tickerActive ? "🟢 ACTIVE" : "🔴 INACTIVE"}</b> | Character Count: {adminTickerInput.length}/200
-              </div>
             </div>
 
-            {/* BROADCAST NOTICES SECTION (ADMIN CONTROL) */}
             <div style={cardStyle}>
               <h4 style={{marginTop:0}}>📢 Broadcast Notice</h4>
               <input placeholder="Notice Title" value={adminNoticeTitle} onChange={(e)=>setAdminNoticeTitle(e.target.value)} style={inputStyle} />
@@ -1290,10 +1287,6 @@ function App() {
         {view === 'attendance' && (
           <div>
             <h3 style={{textAlign:'center', margin:'0 0 5px 0'}}>{filterClass} - {today}</h3>
-            <div style={{...cardStyle, borderLeft:'6px solid #1a4a8e', padding:'10px', marginBottom:'15px'}}>
-               <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)} style={{...inputStyle, margin:0}}><option value="All">All Students ({filterClass})</option><option value="General">General (No Section)</option>{SECTIONS.map(s => <option key={s} value={s}>Section {s}</option>)}</select>
-               <input placeholder="Find Student in List..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{...inputStyle, marginTop:'10px', marginBottom:0}}/>
-            </div>
             {getFilteredRecords().map(r => (
               <div key={r.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <div><div style={{fontWeight:'bold'}}>{r.student_name} {r.section ? <small style={{color:'#1a4a8e', background:'#e8f0fe', padding:'2px 5px', borderRadius:'4px'}}>Sec {r.section}</small> : ''}</div><div style={{fontSize:'11px', color:'#666'}}>Roll: {r.roll_number}</div></div>
@@ -1307,27 +1300,13 @@ function App() {
               try {
                 const qCheck = query(collection(db, "daily_attendance"), where("class", "==", filterClass), where("date", "==", today));
                 const checkSnap = await getDocs(qCheck);
-                
                 if (!checkSnap.empty) {
                   const existingDoc = checkSnap.docs[0];
-                  const existingData = existingDoc.data().attendance_data || {};
-                  const mergedAttendance = { ...existingData, ...attendance };
-                  const attendancePayload = { class: filterClass, date: today, attendance_data: mergedAttendance, timestamp: serverTimestamp() };
-                  
-                  await updateDoc(doc(db, "daily_attendance", existingDoc.id), attendancePayload);
-                  addNotification(`Attendance updated for ${filterClass}`, "success");
+                  await updateDoc(doc(db, "daily_attendance", existingDoc.id), { attendance_data: { ...existingDoc.data().attendance_data, ...attendance }, timestamp: serverTimestamp() });
                 } else {
-                  const attendancePayload = { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() };
-                  await addDoc(collection(db, "daily_attendance"), attendancePayload);
-                  addNotification(`Attendance submitted for ${filterClass}`, "success");
+                  await addDoc(collection(db, "daily_attendance"), { class: filterClass, date: today, attendance_data: attendance, timestamp: serverTimestamp() });
                 }
-                
-                alert("Attendance Saved!"); 
-                setView('dashboard'); 
-                setAttendance({}); 
-                setSearchQuery(''); 
-                setFilterSection('All');
-                fetchStats();
+                alert("Attendance Saved!"); setView('dashboard'); setAttendance({}); fetchStats();
               } catch (e) { alert("Error saving attendance"); }
             }} style={actionBtn}>Submit Attendance</button>
           </div>
@@ -1335,13 +1314,10 @@ function App() {
 
         {view === 'history' && (
           <div>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
-              <h3 style={{margin:0}}>Attendance History</h3>
-              <button onClick={() => downloadPDF("Detailed Attendance History", ["Date", "Class Name"], history.map(h => [h.date, h.class]), "Full_Attendance_History")} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
-            </div>
+            <h3 style={{margin:0, marginBottom: '10px'}}>Attendance History</h3>
             {history.map(h => (
               <div key={h.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                <div><b>{h.date}</b> - {h.class} {h.section_filter && h.section_filter !== 'All' ? `(${h.section_filter})` : ''}</div>
+                <div><b>{h.date}</b> - {h.class}</div>
                 {userRole === 'admin' && <button onClick={() => requestDelete(h)} style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold', cursor:'pointer'}}>Delete</button>}
               </div>
             ))}
@@ -1350,34 +1326,16 @@ function App() {
 
         {view === 'teacher_attendance_view' && (
           <div>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}>
-              <h3 style={{margin:0}}>Teacher Attendance</h3>
-              <button onClick={() => {
-                const list = getUnifiedTeacherAttendanceList();
-                downloadPDF("Teacher Attendance & Absence Report", ["Teacher Name", "Date", "Status/Time", "Distance"], list.map(t => [t.name, t.date, t.time || "❌ Absent (Auto)", t.distance]), "Teacher_Attendance_Report");
-              }} style={{background:'#1a4a8e', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button>
-            </div>
+            <h3 style={{margin:0, marginBottom: '10px'}}>Teacher Attendance</h3>
             <input type="date" value={tAttSearchDate} onChange={(e)=>setTAttSearchDate(e.target.value)} style={inputStyle} placeholder="Filter by Date" />
             {getUnifiedTeacherAttendanceList().map(t => (
               <div key={t.id} style={{...cardStyle, borderLeft: t.time ? '6px solid #2ecc71' : '6px solid #e74c3c'}}>
                 <div style={{display:'flex', justifyContent:'space-between', fontWeight:'bold'}}><span>{t.name}</span><span style={{color: t.time ? '#1a4a8e' : '#e74c3c'}}>{t.time ? t.time : "❌ Absent (Auto Detected)"}</span></div>
                 <div style={{fontSize:'12px', color:'#666', marginTop:'5px'}}>📅 {t.date} | 📍 Dist: {t.distance}</div>
-                {t.time && <button onClick={async () => {
-                      try {
-                        const qStaff = query(collection(db, "staff_records"), where("name", "==", t.name));
-                        const staffSnap = await getDocs(qStaff);
-                        const staffData = !staffSnap.empty ? staffSnap.docs[0].data() : { name: t.name, role: "Staff" };
-                        const qAtt = query(collection(db, "teacher_attendance"), where("name", "==", t.name));
-                        const attSnap = await getDocs(qAtt);
-                        const sortedAtt = attSnap.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-                        setSelectedTeacherProfile(staffData);
-                        setTeacherProfileRecords(sortedAtt);
-                        setMyProfileData(null); setView('teacher_profile_view');
-                      } catch (err) { alert("Error loading profile."); }
-                    }} style={{marginTop:'10px', background:'#f39c12', color:'white', border:'none', padding:'6px 12px', borderRadius:'5px', fontSize:'12px', fontWeight:'bold'}}>View Profile</button>}
               </div>
             ))}
-            <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/><h3 style={{color:'#1a4a8e'}}>Teacher Leave Applications</h3>
+            <hr style={{margin:'30px 0', border:'none', height:'2px', background:'#ddd'}}/>
+            <h3 style={{color:'#1a4a8e'}}>Teacher Leave Applications</h3>
             {allLeaves.map(l => (
               <div key={l.id} style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}><div><b>{l.name}</b><div style={{fontSize:'12px', color:'#666'}}>{l.fromDate} → {l.toDate}</div></div><span style={{padding:'4px 8px', borderRadius:'5px', fontSize:'10px', fontWeight:'bold', background: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12', color:'white'}}>{l.status.toUpperCase()}</span></div>
@@ -1390,7 +1348,7 @@ function App() {
 
         {view === 'monthly_report' && (
           <div style={cardStyle}>
-             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '10px'}}><h4 style={{margin:0}}>{filterClass} Report</h4><button onClick={() => downloadPDF(`${filterClass} - Monthly Attendance Summary (${selectedMonth})`, ["Roll No", "Student Name", "Present", "Absent"], monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]), `${filterClass}_Monthly_Report`)} style={{background:'#2ecc71', color:'white', border:'none', padding:'8px 12px', borderRadius:'5px', fontWeight:'bold', cursor:'pointer'}}>Download PDF</button></div>
+             <h4 style={{margin:0}}>{filterClass} Report</h4>
              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}><thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead><tbody>{monthlyData.map(([info, s])=>(<tr key={info.name} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'8px'}}>{info.roll} - {info.name}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody></table>
              <button onClick={()=>setView('dashboard')} style={{...actionBtn, marginTop:'15px'}}>Back Home</button>
           </div>
@@ -1446,7 +1404,7 @@ function App() {
             </div>
             {staffRecords.map(s => (
               <div key={s.id} style={cardStyle}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><b>{s.name}</b><button onClick={async ()=>{if(window.confirm("Remove staff?")) { await deleteDoc(doc(db, "staff_records", s.id)); addNotification(`Removed: ${s.name}`, "warning"); const snap = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }}} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button></div>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}><b>{s.name}</b><button onClick={async ()=>{if(window.confirm("Remove staff?")) { await deleteDoc(doc(db, "staff_records", s.id)); const snap = await getDocs(query(collection(db, "staff_records"))); setStaffRecords(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }}} style={{background:'#e74c3c', color:'white', border:'none', padding:'4px 8px', borderRadius:'5px', fontSize:'10px'}}>Remove</button></div>
                 <div style={{fontSize:'12px', color:'#666'}}>Role: {s.role} | PWD: {s.password}</div>
               </div>
             ))}
