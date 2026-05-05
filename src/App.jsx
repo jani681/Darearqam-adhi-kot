@@ -1318,7 +1318,17 @@ function App() {
             {history.map(h => (
               <div key={h.id} style={{...cardStyle, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                 <div><b>{h.date}</b> - {h.class}</div>
-                {userRole === 'admin' && <button onClick={() => requestDelete(h)} style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold', cursor:'pointer'}}>Delete</button>}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button onClick={() => {
+                    const headers = ["Roll No", "Student Name", "Status"];
+                    const body = Object.entries(h.attendance_data || {}).map(([id, status]) => {
+                      const std = records.find(r => r.id === id);
+                      return [std?.roll_number || 'N/A', std?.student_name || 'N/A', status === 'P' ? 'Present' : 'Absent'];
+                    });
+                    downloadPDF(`Attendance Report: ${h.class}`, headers, body, `Attendance_${h.class}_${h.date}`);
+                  }} style={{ background: '#2ecc71', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>PDF</button>
+                  {userRole === 'admin' && <button onClick={() => requestDelete(h)} style={{background:'#e74c3c', color:'white', border:'none', padding:'5px 10px', borderRadius:'5px', fontSize:'11px', fontWeight:'bold', cursor:'pointer'}}>Delete</button>}
+                </div>
               </div>
             ))}
           </div>
