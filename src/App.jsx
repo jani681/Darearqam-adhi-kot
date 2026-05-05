@@ -1358,7 +1358,14 @@ function App() {
 
         {view === 'monthly_report' && (
           <div style={cardStyle}>
-             <h4 style={{margin:0}}>{filterClass} Report</h4>
+             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
+               <h4 style={{margin:0}}>{filterClass} Report</h4>
+               <button onClick={() => {
+                  const headers = ["Roll No", "Student Name", "Present", "Absent"];
+                  const body = monthlyData.map(([info, s]) => [info.roll, info.name, s.p, s.a]);
+                  downloadPDF(`${filterClass} Monthly Report (${selectedMonth})`, headers, body, `${filterClass}_Report_${selectedMonth}`);
+               }} style={{ background: '#2ecc71', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold' }}>Download PDF</button>
+             </div>
              <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}><thead><tr style={{background:'#eee'}}><th style={{padding:'5px', textAlign:'left'}}>Roll-Name</th><th>P</th><th>A</th></tr></thead><tbody>{monthlyData.map(([info, s])=>(<tr key={info.name} style={{borderBottom:'1px solid #ddd'}}><td style={{padding:'8px'}}>{info.roll} - {info.name}</td><td style={{textAlign:'center'}}>{s.p}</td><td style={{textAlign:'center'}}>{s.a}</td></tr>))}</tbody></table>
              <button onClick={()=>setView('dashboard')} style={{...actionBtn, marginTop:'15px'}}>Back Home</button>
           </div>
