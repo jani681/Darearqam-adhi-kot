@@ -248,6 +248,24 @@ function App() {
     }
   };
 
+  // CLEAR ALL NOTICES FEATURE
+  const handleClearAllNotices = async () => {
+    if (!window.confirm("Are you sure you want to delete ALL broadcast notices? This action cannot be undone.")) return;
+    try {
+      const snapshot = await getDocs(collection(db, "notices"));
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+      addNotification("All broadcast notices cleared", "warning");
+      alert("All notices have been deleted successfully.");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to clear notices");
+    }
+  };
+
   const handleDownloadBackup = async () => {
     try {
       addNotification("Preparing backup...", "info");
@@ -931,18 +949,17 @@ function App() {
               "{dailyQuote}"
             </div>
 
-            <div style={{ ...cardStyle, borderLeft: '6px solid #3498db' }}>
-              <h4 style={{ marginTop: 0, fontSize: '14px' }}>📢 System Notices</h4>
-              {systemMessages.length === 0 ? (
-                <div style={{ fontSize: '11px', color: '#666' }}>No notices available</div>
-              ) : (
-                systemMessages.map(m => (
+            {/* BROADCAST NOTICES SECTION (TEACHER VIEW) */}
+            {systemMessages.length > 0 && (
+              <div style={{ ...cardStyle, borderLeft: '6px solid #3498db' }}>
+                <h4 style={{ marginTop: 0, fontSize: '14px' }}>📢 System Notices</h4>
+                {systemMessages.map(m => (
                   <div key={m.id} style={{ fontSize: '11px', background: '#f8f9fa', padding: '6px', borderRadius: '6px', marginBottom: '4px', borderLeft: '3px solid #3498db' }}>
                     <strong>{m.title}</strong>: {m.text}
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
 
             <div style={{ marginBottom: '15px' }}>
               <MiniCalendar events={myAttendanceRecords} />
@@ -1016,11 +1033,15 @@ function App() {
               </div>
             </div>
 
+            {/* BROADCAST NOTICES SECTION (ADMIN CONTROL) */}
             <div style={cardStyle}>
               <h4 style={{marginTop:0}}>📢 Broadcast Notice</h4>
               <input placeholder="Notice Title" value={adminNoticeTitle} onChange={(e)=>setAdminNoticeTitle(e.target.value)} style={inputStyle} />
               <textarea placeholder="Message for all teachers..." value={adminNoticeMessage} onChange={(e)=>setAdminNoticeMessage(e.target.value)} style={{...inputStyle, height: '60px'}} />
-              <button onClick={handleCreateNotice} style={{...actionBtn, padding:'10px', fontSize:'12px'}}>Publish Notice</button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={handleCreateNotice} style={{...actionBtn, padding:'10px', fontSize:'12px', flex: 2}}>Publish Notice</button>
+                <button onClick={handleClearAllNotices} style={{...actionBtn, padding:'10px', fontSize:'12px', background: '#e74c3c', flex: 1}}>Clear All</button>
+              </div>
             </div>
 
             <div style={{...cardStyle, borderLeft: '6px solid #9b59b6'}}>
