@@ -121,6 +121,10 @@ function App() {
 
   // Task Specific State
   const [isMyDayModalOpen, setIsMyDayModalOpen] = useState(false);
+  const [dailyFocus, setDailyFocus] = useState('');
+  const [teacherPlan, setTeacherPlan] = useState('');
+  const [myDayNotes, setMyDayNotes] = useState('');
+  const [myDayReminders, setMyDayReminders] = useState('');
 
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
@@ -774,6 +778,13 @@ function App() {
     }
   `;
 
+  const resetMyDay = () => {
+    setDailyFocus('');
+    setTeacherPlan('');
+    setMyDayNotes('');
+    setMyDayReminders('');
+  };
+
   if (!isLoggedIn) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', backgroundColor:'#1a4a8e', color:'white' }}>
       <img 
@@ -830,27 +841,52 @@ function App() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
               <h3 style={{ margin: 0, color: '#1a4a8e' }}>📅 My Day</h3>
-              <button onClick={() => setIsMyDayModalOpen(false)} style={{ background: '#eee', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button onClick={resetMyDay} style={{ background: '#f39c12', color: 'white', border: 'none', borderRadius: '8px', padding: '5px 12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Clear All</button>
+                <button onClick={() => setIsMyDayModalOpen(false)} style={{ background: '#eee', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+              </div>
             </div>
             
             <div style={{ marginBottom: '15px' }}>
               <h4 style={{ color: '#f39c12', marginBottom: '5px' }}>Daily Focus</h4>
-              <div style={{ height: '40px', background: '#f9f9f9', borderRadius: '8px', border: '1px dashed #ccc' }}></div>
+              <input 
+                type="text" 
+                placeholder="Today's main goal..."
+                value={dailyFocus}
+                onChange={(e) => setDailyFocus(e.target.value)}
+                style={{ ...inputStyle, margin: 0 }} 
+              />
             </div>
 
             <div style={{ marginBottom: '15px' }}>
               <h4 style={{ color: '#1a4a8e', marginBottom: '5px' }}>Teacher Plan</h4>
-              <div style={{ height: '60px', background: '#f9f9f9', borderRadius: '8px', border: '1px dashed #ccc' }}></div>
+              <textarea 
+                placeholder="What are we covering today?"
+                value={teacherPlan}
+                onChange={(e) => setTeacherPlan(e.target.value)}
+                style={{ ...inputStyle, height: '60px', margin: 0 }} 
+              />
             </div>
 
             <div style={{ marginBottom: '15px' }}>
               <h4 style={{ color: '#666', marginBottom: '5px' }}>Notes</h4>
-              <div style={{ height: '80px', background: '#f9f9f9', borderRadius: '8px', border: '1px dashed #ccc' }}></div>
+              <textarea 
+                placeholder="Extra observations or notes..."
+                value={myDayNotes}
+                onChange={(e) => setMyDayNotes(e.target.value)}
+                style={{ ...inputStyle, height: '80px', margin: 0 }} 
+              />
             </div>
 
             <div style={{ marginBottom: '10px' }}>
               <h4 style={{ color: '#e74c3c', marginBottom: '5px' }}>Reminders</h4>
-              <div style={{ height: '40px', background: '#f9f9f9', borderRadius: '8px', border: '1px dashed #ccc' }}></div>
+              <input 
+                type="text" 
+                placeholder="Don't forget..."
+                value={myDayReminders}
+                onChange={(e) => setMyDayReminders(e.target.value)}
+                style={{ ...inputStyle, margin: 0 }} 
+              />
             </div>
 
             <button onClick={() => setIsMyDayModalOpen(false)} style={{ ...actionBtn, marginTop: '10px' }}>Close Window</button>
