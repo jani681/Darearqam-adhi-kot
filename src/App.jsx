@@ -135,6 +135,18 @@ function App() {
 
   // TOOLKIT STATES
   const [isToolkitOpen, setIsToolkitOpen] = useState(false);
+  const [toolkitTool, setToolkitTool] = useState(null);
+
+  // STOPWATCH STATE
+  const [swTime, setSwTime] = useState(0);
+  const [swActive, setSwActive] = useState(false);
+  const swRef = useRef(null);
+
+  // TIMER STATE
+  const [tmInput, setTmInput] = useState("");
+  const [tmTime, setTmTime] = useState(0);
+  const [tmActive, setTmActive] = useState(false);
+  const tmRef = useRef(null);
 
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
@@ -155,6 +167,51 @@ function App() {
       if ('vibrate' in navigator) navigator.vibrate(200);
     }
   }, [tasbeehCount, tasbeehTarget, tasbeehType, customTasbeeh]);
+
+  // STOPWATCH LOGIC
+  useEffect(() => {
+    if (swActive) {
+      swRef.current = setInterval(() => {
+        setSwTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      clearInterval(swRef.current);
+    }
+    return () => clearInterval(swRef.current);
+  }, [swActive]);
+
+  const formatStopwatch = (totalSeconds) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h > 0 ? h.toString().padStart(2, '0') + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // TIMER LOGIC
+  useEffect(() => {
+    if (tmActive && tmTime > 0) {
+      tmRef.current = setInterval(() => {
+        setTmTime(prev => prev - 1);
+      }, 1000);
+    } else if (tmTime === 0 && tmActive) {
+      setTmActive(false);
+      clearInterval(tmRef.current);
+      alert("Time completed");
+      if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
+    } else {
+      clearInterval(tmRef.current);
+    }
+    return () => clearInterval(tmRef.current);
+  }, [tmActive, tmTime]);
+
+  const handleStartTimer = () => {
+    if (!tmActive && tmTime === 0) {
+      const seconds = parseInt(tmInput);
+      if (isNaN(seconds) || seconds <= 0) return alert("Please set a valid time in seconds");
+      setTmTime(seconds);
+    }
+    setTmActive(true);
+  };
 
   const handleSaveTiming = () => {
     localStorage.setItem('schoolStartTime', schoolStartTime);
@@ -991,7 +1048,7 @@ function App() {
 
       {isToolkitOpen && (
         <div 
-          onClick={() => setIsToolkitOpen(false)}
+          onClick={() => { setIsToolkitOpen(false); setToolkitTool(null); }}
           style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.7)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}
         >
           <div 
@@ -999,40 +1056,112 @@ function App() {
             style={{ background:'white', width:'100%', maxWidth:'450px', borderRadius:'15px', padding:'20px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0, color: '#1a4a8e' }}>🛠️ Toolkit</h3>
-              <button onClick={() => setIsToolkitOpen(false)} style={{ background: '#eee', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+              <h3 style={{ margin: 0, color: '#1a4a8e' }}>🛠️ Toolkit {toolkitTool ? `- ${toolkitTool}` : ''}</h3>
+              <button onClick={() => { setIsToolkitOpen(false); setToolkitTool(null); }} style={{ background: '#eee', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {["Stopwatch", "Timer", "Calculator", "Unit Converter", "Marks Calculator"].map(tool => (
-                <div 
-                  key={tool}
-                  onClick={() => alert(`${tool} module is under development.`)}
-                  style={{ 
-                    padding: '20px 10px', 
-                    background: '#f8f9fa', 
-                    border: '1px solid #eee', 
-                    borderRadius: '12px', 
-                    textAlign: 'center', 
-                    cursor: 'pointer',
-                    transition: 'transform 0.1s'
-                  }}
-                  onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-                  onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  <div style={{ fontSize: '24px', marginBottom: '5px' }}>
-                    {tool === "Stopwatch" && "⏱️"}
-                    {tool === "Timer" && "⏲️"}
-                    {tool === "Calculator" && "🔢"}
-                    {tool === "Unit Converter" && "⚖️"}
-                    {tool === "Marks Calculator" && "🎓"}
+            {!toolkitTool ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {["Stopwatch", "Timer", "Calculator", "Unit Converter", "Marks Calculator"].map(tool => (
+                  <div 
+                    key={tool}
+                    onClick={() => {
+                      if (tool === "Stopwatch" || tool === "Timer") {
+                        setToolkitTool(tool);
+                      } else {
+                        alert(`${tool} module is under development.`);
+                      }
+                    }}
+                    style={{ 
+                      padding: '20px 10px', 
+                      background: '#f8f9fa', 
+                      border: '1px solid #eee', 
+                      borderRadius: '12px', 
+                      textAlign: 'center', 
+                      cursor: 'pointer',
+                      transition: 'transform 0.1s'
+                    }}
+                    onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+                    onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  >
+                    <div style={{ fontSize: '24px', marginBottom: '5px' }}>
+                      {tool === "Stopwatch" && "⏱️"}
+                      {tool === "Timer" && "⏲️"}
+                      {tool === "Calculator" && "🔢"}
+                      {tool === "Unit Converter" && "⚖️"}
+                      {tool === "Marks Calculator" && "🎓"}
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a4a8e' }}>{tool}</div>
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a4a8e' }}>{tool}</div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div>
+                {toolkitTool === "Stopwatch" && (
+                  <div style={{ textAlign: 'center', padding: '10px' }}>
+                    <div style={{ fontSize: '48px', fontWeight: 'bold', color: '#1a4a8e', marginBottom: '20px', fontFamily: 'monospace' }}>
+                      {formatStopwatch(swTime)}
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button 
+                        onClick={() => setSwActive(!swActive)} 
+                        style={{ ...actionBtn, flex: 2, background: swActive ? '#e67e22' : '#2ecc71' }}
+                      >
+                        {swActive ? "Pause" : "Start"}
+                      </button>
+                      <button 
+                        onClick={() => { setSwActive(false); setSwTime(0); }} 
+                        style={{ ...actionBtn, flex: 1, background: '#7f8c8d' }}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {toolkitTool === "Timer" && (
+                  <div style={{ textAlign: 'center', padding: '10px' }}>
+                    <div style={{ fontSize: '48px', fontWeight: 'bold', color: '#e74c3c', marginBottom: '10px', fontFamily: 'monospace' }}>
+                      {Math.floor(tmTime / 60).toString().padStart(2, '0')}:{(tmTime % 60).toString().padStart(2, '0')}
+                    </div>
+                    
+                    {!tmActive && tmTime === 0 && (
+                      <input 
+                        type="number" 
+                        placeholder="Enter seconds..." 
+                        value={tmInput} 
+                        onChange={(e) => setTmInput(e.target.value)} 
+                        style={{ ...inputStyle, textAlign: 'center', marginBottom: '15px' }} 
+                      />
+                    )}
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button 
+                        onClick={handleStartTimer} 
+                        style={{ ...actionBtn, flex: 2, background: tmActive ? '#e67e22' : '#2ecc71' }}
+                      >
+                        {tmActive ? "Pause" : "Start"}
+                      </button>
+                      <button 
+                        onClick={() => { setTmActive(false); setTmTime(0); setTmInput(""); }} 
+                        style={{ ...actionBtn, flex: 1, background: '#7f8c8d' }}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => setToolkitTool(null)} 
+                  style={{ ...actionBtn, marginTop: '20px', background: '#34495e', padding: '10px', fontSize: '14px' }}
+                >
+                  Back to Tools
+                </button>
+              </div>
+            )}
             
-            <button onClick={() => setIsToolkitOpen(false)} style={{ ...actionBtn, marginTop: '20px', background: '#7f8c8d' }}>Close Toolkit</button>
+            {!toolkitTool && <button onClick={() => setIsToolkitOpen(false)} style={{ ...actionBtn, marginTop: '20px', background: '#7f8c8d' }}>Close Toolkit</button>}
           </div>
         </div>
       )}
@@ -1434,7 +1563,7 @@ function App() {
               { (myProfileData || selectedTeacherProfile).salary && <p style={{color:'#666', margin:'5px 0'}}>Salary/Pay: {(myProfileData || selectedTeacherProfile).salary}</p> }
               <div style={{marginTop:'10px', padding:'10px', background:'#f8f9fa', borderRadius:'8px', fontSize:'13px'}}>
                 <strong>Attendance Summary:</strong><br/>
-                Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave} | Absent: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalAbsent}
+                Present: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => l.name === (myProfileData || selectedTeacherProfile).name)).totalPresent} | Leave: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalLeave} | Absent: {getTeacherStats(userRole === 'staff' ? myAttendanceRecords : teacherProfileRecords, userRole === 'staff' ? myLeaveRecords : allLeaves.filter(al => al.name === (myProfileData || selectedTeacherProfile).name)).totalAbsent}
               </div>
               <button onClick={async () => {
                    const currentStaffName = (myProfileData || selectedTeacherProfile).name;
