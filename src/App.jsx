@@ -133,6 +133,9 @@ function App() {
   const [tasbeehType, setTasbeehType] = useState(localStorage.getItem('tasbeehType') || 'SubhanAllah');
   const [customTasbeeh, setCustomTasbeeh] = useState(localStorage.getItem('customTasbeeh') || '');
 
+  // TOOLKIT STATES
+  const [isToolkitOpen, setIsToolkitOpen] = useState(false);
+
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
 
@@ -986,6 +989,54 @@ function App() {
         </div>
       )}
 
+      {isToolkitOpen && (
+        <div 
+          onClick={() => setIsToolkitOpen(false)}
+          style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.7)', zIndex:5000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{ background:'white', width:'100%', maxWidth:'450px', borderRadius:'15px', padding:'20px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0, color: '#1a4a8e' }}>🛠️ Toolkit</h3>
+              <button onClick={() => setIsToolkitOpen(false)} style={{ background: '#eee', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontWeight: 'bold' }}>×</button>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {["Stopwatch", "Timer", "Calculator", "Unit Converter", "Marks Calculator"].map(tool => (
+                <div 
+                  key={tool}
+                  onClick={() => alert(`${tool} module is under development.`)}
+                  style={{ 
+                    padding: '20px 10px', 
+                    background: '#f8f9fa', 
+                    border: '1px solid #eee', 
+                    borderRadius: '12px', 
+                    textAlign: 'center', 
+                    cursor: 'pointer',
+                    transition: 'transform 0.1s'
+                  }}
+                  onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+                  onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <div style={{ fontSize: '24px', marginBottom: '5px' }}>
+                    {tool === "Stopwatch" && "⏱️"}
+                    {tool === "Timer" && "⏲️"}
+                    {tool === "Calculator" && "🔢"}
+                    {tool === "Unit Converter" && "⚖️"}
+                    {tool === "Marks Calculator" && "🎓"}
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a4a8e' }}>{tool}</div>
+                </div>
+              ))}
+            </div>
+            
+            <button onClick={() => setIsToolkitOpen(false)} style={{ ...actionBtn, marginTop: '20px', background: '#7f8c8d' }}>Close Toolkit</button>
+          </div>
+        </div>
+      )}
+
       {showPreview && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.7)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', boxSizing:'border-box' }}>
           <div style={{ background:'white', width:'100%', maxWidth:'600px', borderRadius:'15px', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
@@ -1076,6 +1127,7 @@ function App() {
           }} style={getNavStyle('teacher_attendance_view')}>📍 Teacher Att</button>}
           {userRole === 'staff' && <button onClick={() => setIsMyDayModalOpen(true)} style={getNavStyle('myday')}>📅 My Day</button>}
           <button onClick={() => setIsTasbeehOpen(true)} style={getNavStyle('tasbeeh')}>📿 Tasbeeh</button>
+          <button onClick={() => setIsToolkitOpen(true)} style={getNavStyle('toolkit')}>🛠️ Toolkit</button>
           <button onClick={() => setView('security')} style={getNavStyle('security')}>🔒 Security</button>
           <button onClick={() => { setIsLoggedIn(false); setNotifications([]); }} style={getNavStyle('logout')}>🚪 Out</button>
         </div>
