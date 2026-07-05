@@ -345,7 +345,7 @@ function App() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `ali_campus_backup_${today}.json`;
+      link.download = `onyxstack_school_backup_${today}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -483,7 +483,7 @@ function App() {
     doc.rect(0, 0, 210, 30, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
-    doc.text("DAR-E-ARQAM (ALI CAMPUS)", 105, 15, { align: 'center' });
+    doc.text("ONYXSTACK SCHOOL MANAGEMENT SYSTEM", 105, 15, { align: 'center' });
     doc.setFontSize(12);
     doc.text(title, 105, 25, { align: 'center' });
     doc.autoTable({ 
@@ -516,7 +516,7 @@ function App() {
     
     doc.setFontSize(22);
     doc.setTextColor(26, 74, 142);
-    doc.text("DAR-E-ARQAM (ALI CAMPUS)", 105, 25, { align: 'center' });
+    doc.text("ONYXSTACK SCHOOL MANAGEMENT SYSTEM", 105, 25, { align: 'center' });
     
     doc.setFontSize(14);
     doc.setTextColor(0, 0, 0);
@@ -729,7 +729,7 @@ function App() {
       return alert("New passwords do not match");
     }
 
-    setIsChangingPass(true);
+    setIsChangingPass(true)
     try {
       if (userRole === 'admin') {
         if (currentPassword !== ADMIN_PASSWORD) {
@@ -816,10 +816,10 @@ function App() {
           objectFit: 'contain'
         }} 
       />
-      <h3>Ali Campus Login</h3>
+      <h3>OnyxStack School management system Login</h3>
       <input type="password" value={passInput} onChange={(e)=>setPassInput(e.target.value)} style={{padding:'12px', borderRadius:'8px', width:'250px', textAlign:'center'}} />
       <button onClick={handleLogin} style={{marginTop:'15px', padding:'12px 60px', background:'#f39c12', color:'white', border:'none', borderRadius:'8px', fontWeight:'bold'}}>LOGIN</button>
-      <div style={{ fontSize: "12px", color: "#888", textAlign: "center", marginTop: "10px" }}>Developed by : Touqeer Iqbal Baghoor<br/>Contact: 923015800630</div>
+      <div style={{ fontSize: "12px", color: "#888", textAlign: "center", marginTop: "10px" }}>Developed by : OnyxStack Labs<br/>Email: onyxstacklabs@gmail.com</div>
     </div>
   );
 
@@ -1053,7 +1053,7 @@ function App() {
               objectFit: 'contain'
             }} 
           />
-          <h3 style={{margin:0}}>DAR-E-ARQAM (ALI CAMPUS)</h3>
+          <h3 style={{margin:0}}>ONYXSTACK SCHOOL MANAGEMENT SYSTEM</h3>
         </div>
 
         {userRole === 'staff' && <div style={{background:'rgba(255,255,255,0.2)', padding:'5px', borderRadius:'8px', fontSize:'12px', marginTop:'5px'}}>Teacher: {staffName}</div>}
@@ -1628,7 +1628,7 @@ function App() {
               <div key={l.id} style={{...cardStyle, borderLeft:'6px solid #1a4a8e'}}>
                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}><div><b>{l.name}</b><div style={{fontSize:'12px', color:'#666'}}>{l.fromDate} → {l.toDate}</div></div><span style={{padding:'4px 8px', borderRadius:'5px', fontSize:'10px', fontWeight:'bold', background: l.status === 'approved' ? '#2ecc71' : l.status === 'rejected' ? '#e74c3c' : '#f39c12', color:'white'}}>{l.status.toUpperCase()}</span></div>
                  <p style={{fontSize:'13px', color:'#333', background:'#f9f9f9', padding:'8px', borderRadius:'5px', margin:'10px 0'}}>{l.reason}</p>
-                 {l.status === 'pending' && <div style={{display:'flex', gap:'10px'}}><button onClick={async () => { await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'approved' }); addNotification(`Approved leave for ${l.name}`, "success"); setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'approved'} : item)); fetchStats(); }} style={{flex:1, background:'#2ecc71', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>✅ Approve</button><button onClick={async () => { await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'rejected' }); addNotification(`Rejected leave for ${l.name}`, "warning"); setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'rejected'} : item)); fetchStats(); }} style={{flex:1, background:'#e74c3c', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>❌ Reject</button></div>}
+                 {l.status === 'pending' && <div style={{display:'flex', gap:'10pxfixed'}}><button onClick={async () => { await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'approved' }); addNotification(`Approved leave for ${l.name}`, "success"); setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'approved'} : item)); fetchStats(); }} style={{flex:1, background:'#2ecc71', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>✅ Approve</button><button onClick={async () => { await updateDoc(doc(db, "teacher_leaves", l.id), { status: 'rejected' }); addNotification(`Rejected leave for ${l.name}`, "warning"); setAllLeaves(allLeaves.map(item => item.id === l.id ? {...item, status:'rejected'} : item)); fetchStats(); }} style={{flex:1, background:'#e74c3c', color:'white', border:'none', padding:'8px', borderRadius:'5px', fontWeight:'bold'}}>❌ Reject</button></div>}
               </div>
             ))}
           </div>
@@ -1707,7 +1707,7 @@ function App() {
         )}
       </div>
 
-      <footer style={{ fontSize: "12px", color: "#666", textAlign: "center", padding: "8px 0" }}>Developed by : Touqeer Iqbal Baghoor<br/>Contact: 923015800630</footer>
+      <footer style={{ fontSize: "12px", color: "#666", textAlign: "center", padding: "8px 0" }}>Developed by : OnyxStack Labs<br/>Email: onyxstacklabs@gmail.com</footer>
     </div>
   );
 }
